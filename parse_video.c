@@ -2,8 +2,8 @@
 #include "parse_video.h"
 
 /* Call this first
-Initializes AVFormatContext
-Returns number of streams in file, -1 if there's an error */
+   Initializes AVFormatContext
+   Returns number of streams in file, -1 if there's an error */
 int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int *audioIdx, 
 		       double *videoRate, double *audioRate) {
   int videoStream, audioStream;
@@ -38,9 +38,6 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
   /* Check frame rate */
   if (videoStream != -1) {
     AVCodecContext *cod = (*ctx)->streams[videoStream]->codec;
-    /* printf("Video frame rate:%i.%i\n", cod->time_base.num, cod->time_base.den);
-       printf("Video samples per second: %i\n", cod->sample_rate); */
-
     *videoRate = 0.5 * (double)cod->time_base.den / (double)cod->time_base.num;
   }
   else {
@@ -49,9 +46,6 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
 
   if (audioStream != -1) {
     AVCodecContext *cod = (*ctx)->streams[audioStream]->codec;
-    /* printf("Audio frame rate:%i.%i\n", cod->time_base.num, cod->time_base.den); 
-       printf("Audio samples per second: %i\n", cod->sample_rate); */
-
     *audioRate = (double)cod->sample_rate;
   }
 
@@ -59,8 +53,8 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
 }
 
 /* Call this to get the frames. Allocate yourself memory to myFrame
-// Returns videoIdx/audioIdx, indicating to which stream this frame belongs to
-// Returns negative number if all frames are read (or error) */
+   Returns videoIdx/audioIdx, indicating to which stream this frame belongs to
+   Returns negative number if all frames are read (or error) */
 int get_frame(AVFormatContext *ctx, struct frame *myFrame, int videoIdx, int audioIdx, 
 	      double videoRate, double audioRate) {
   AVPacket packet;

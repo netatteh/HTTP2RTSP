@@ -4,14 +4,14 @@ LDFLAGS=-lavformat -lavcodec
 
 SUFFIXES=.c .o
 
-PROGS=http2rtsp tester parsetest timeouttest
+PROGS=http2rtsp tester parsetest timeouttest rtptest
 
 all: $(PROGS) cleano
 
 .c.o:	
 	$(CC) $(CFLAGS) -c $<
 
-http2rtsp: main.o fileio.o socketfunc.o util.o httpmsg.o server.o parse_video.o
+http2rtsp: main.o fileio.o socketfunc.o util.o httpmsg.o server.o parse_video.o send_frame.o
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
 tester: tester.o httpmsg.o
@@ -22,6 +22,9 @@ parsetest: parse_video.o parse_example.o
 timeouttest: timeouttest.o util.o fileio.o
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 	
+rtptest: send_frame.o rtptest.o fileio.o socketfunc.o util.o parse_video.o
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+
 clean:
 	rm -f *.o $(PROGS) gmon.out
 
