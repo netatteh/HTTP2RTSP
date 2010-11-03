@@ -5,11 +5,11 @@
 #include <libavformat/avformat.h>
 
 // Definition of frame struct
-struct frame {
+typedef struct frame {
   uint8_t *data;
-  int size;
+  size_t size;
   uint32_t timestamp;
-};
+} Frame;
 
 // Call this function to oprn the file and initialize AVFormatContext
 // Returns: number of streams in the filee (1 if only video, 2 if video&audio,

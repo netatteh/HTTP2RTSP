@@ -4,7 +4,7 @@ LDFLAGS=-lavformat -lavcodec
 
 SUFFIXES=.c .o
 
-PROGS=http2rtsp tester parsetest
+PROGS=http2rtsp tester parsetest timeouttest
 
 all: $(PROGS) cleano
 
@@ -17,6 +17,9 @@ http2rtsp: main.o fileio.o socketfunc.o util.o httpmsg.o server.o parse_video.o
 tester: tester.o httpmsg.o
 
 parsetest: parse_video.o parse_example.o
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+	
+timeouttest: timeouttest.o util.o fileio.o
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 	
 clean:
