@@ -41,9 +41,11 @@ int main(int argc, char *argv[]) {
 
       aud++;
    }
+    free(myFrame->data);
 
   }
 
+  free(myFrame);
   close_context(ctx);
 
   return 0;
