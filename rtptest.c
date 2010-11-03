@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
     get_frame(ctx, myFrame, videoidx, audioidx, videorate, audiorate);
     temp = send_frame(buf, myFrame, sockfd, seqnum);
 
-    printf("Frame %d,  size %d sent in %d packets, seqnum=%d\n", i, myFrame->size, temp, seqnum);
+    printf("Frame %d,  size %d sent in %d packets, seqnum=%d\n", i, (int)myFrame->size, temp, seqnum);
     seqnum += temp;
 
     free(myFrame->data);

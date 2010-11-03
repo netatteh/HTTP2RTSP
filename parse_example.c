@@ -5,8 +5,6 @@ int main(int argc, char *argv[]) {
   AVFormatContext *ctx;
   int videoIdx, audioIdx, temp, i;
   double audioRate, videoRate;
-  int vid, aud, a;
-  uint8_t *data;
   struct frame *myFrame = malloc(sizeof(struct frame));
   int vid, aud;
   size_t a;
@@ -31,7 +29,7 @@ int main(int argc, char *argv[]) {
     }
 
     else if (temp == audioIdx) {
-      printf("Audio %i, timestamp %i, size %i\n", aud, myFrame->timestamp, myFrame->size);
+      printf("Audio %i, timestamp %i, size %i\n", aud, myFrame->timestamp, (int)myFrame->size);
       data = myFrame->data;
       printf("data: ");
       for (a=0; a<myFrame->size; a++) {
