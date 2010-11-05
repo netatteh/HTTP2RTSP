@@ -4,11 +4,16 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 
+#define VIDEO_FRAME 0
+#define AUDIO_FRAME 1
+
+
 /* Definition of frame struct */
 typedef struct frame {
   uint8_t *data;
   size_t size;
   uint32_t timestamp;
+  int frametype;
 } Frame;
 
 /* Call this function to oprn the file and initialize AVFormatContext
@@ -20,7 +25,7 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
 /* Call this in a loop to get the frames
    Allocate memory for myFrame yourself, the function will then fill it for you
    Returns: videoIdx if it's a video frame, audioIdx if it's an audio frame, -1 when all frames are read */
-int get_frame(AVFormatContext *ctx, struct frame *myFrame, int videoIdx, int audioIdx,
+int get_frame(AVFormatContext *ctx, Frame *myFrame, int videoIdx, int audioIdx,
 	      double videoRate, double audioRate);
 
 /* Close file and context */

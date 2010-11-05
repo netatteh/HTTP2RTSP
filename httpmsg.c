@@ -115,6 +115,10 @@ int parse_rtsp(RTSPMsg *msg, const unsigned char *buffer)
       sscanf(a + 12, "%[0-9]-%[0-9]", (char *)&(msg->clirtpport), (char *)&(msg->clirtcpport));
       msg->fields |= F_TRANSPORT;
     }
+    else if (strncmp(temp, "Range: ", 7) == 0) {
+      sscanf(temp, "Range: %s\r\n", (char *)&(msg->range));
+      msg->fields |= F_RANGE;
+    }
 
     temp = strstr(temp, "\r\n") + 2;
   }
@@ -160,6 +164,11 @@ int write_rtsp(const RTSPMsg *msg, unsigned char *buffer)
 
   if (msg->fields & F_TRANSPORT) {
     sprintf(temp, "Transport: %s\r\n", msg->transport);
+    temp += strlen(temp);
+  }
+
+  if (msg->fields & F_RANGE) {
+    sprintf(temp, "Range: %s\r\n", msg->range);
     temp += strlen(temp);
   }
 
@@ -229,7 +238,21 @@ int rtsp_setup(const RTSPMsg *msg, unsigned char *buf, int rtpport, int rtcpport
 }
 
 
+int rtsp_play(const RTSPMsg *msg, unsigned char *buf)
+{
+  char timebuf[50];
+  time_t timeint;
+  RTSPMsg newmsg = *msg;
+  memset(timebuf, 0, 50);
+  time(&timeint);
+  ctime_r(&timeint, timebuf);
+  timebuf[strlen(timebuf) - 1] = 0;
+  sprintf(newmsg.date, "%s", timebuf);
+  newmsg.fields |= F_DATE;
+  newmsg.fields ^= F_SESSION;
 
+  return write_rtsp(&newmsg, buf); 
+}
 
 
 

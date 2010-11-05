@@ -46,6 +46,7 @@ typedef struct rtspmsg
   char date[FIELDLEN];
   char contenttype[FIELDLEN];
   char data[URLSIZE];
+  char range[FIELDLEN];
 } RTSPMsg;
 
 /* Builds a HTTP/1.1 GET message for retrieving the resource
@@ -73,6 +74,8 @@ int rtsp_options(const RTSPMsg *msg, unsigned char *buf);
 int rtsp_describe(const RTSPMsg *msg, unsigned char *buf);
 
 int rtsp_setup(const RTSPMsg *msg, unsigned char *buf, int rtpport, int rtcpport);
+
+int rtsp_play(const RTSPMsg *msg, unsigned char *buf);
 
 #endif
 

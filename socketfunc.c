@@ -232,7 +232,7 @@ int send_all(int sockfd, unsigned char *buf, int size)
   int sent = 0, n;
   int left = size;
 
-  printf("\nSending:\n%s", (char *)buf);
+  printf("Sending %d bytes to socket %d\n", size, sockfd);
   fflush(stdout);
   while (sent < size) {
     n = send(sockfd, buf + sent, left, 0);
