@@ -89,9 +89,9 @@ int main(int argc, char *argv[])
 
   /* Do some necessary signal handling. PIPE for double sends,
    * INT and term for cleaning when terminated. */
-  handle_signal(SIGPIPE);
+  /* handle_signal(SIGPIPE); */
   /* handle_signal(SIGINT); */
-  handle_signal(SIGTERM);
+  /* handle_signal(SIGTERM); */
 
   
   /* Open the logfile */

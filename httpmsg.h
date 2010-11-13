@@ -77,5 +77,7 @@ int rtsp_setup(const RTSPMsg *msg, unsigned char *buf, int rtpport, int rtcpport
 
 int rtsp_play(const RTSPMsg *msg, unsigned char *buf);
 
+int rtsp_ping(unsigned char *buf, int session);
+
 #endif
 

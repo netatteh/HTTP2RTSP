@@ -2,8 +2,26 @@
 
 #include "send_frame.h"
 #include "socketfunc.h"
+#include <arpa/inet.h>
 
 uint32_t ssrc = 8472857;
+
+/* Packs an unsigned short (2bytes) to char buffer */
+/* Model from Beej's Guide */
+void packi16(unsigned char *buf, unsigned short i) {
+  *buf++ = i>>8;
+  *buf++ = i;
+}
+
+
+void pack32i(unsigned char *buf, uint32_t src)
+{
+  int i;
+  for (i = 24; i >= 0; i -= 8) {
+    *buf++ = src >> i;
+  }
+}
+
 
 int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t seqnum) {
   const unsigned char firstbyte = 0x80;
@@ -27,15 +45,17 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
     else {
       buflen = spaceForData + 12;
     }
-    
+
     bzero(buf, BUFSIZE);
     memcpy(buf, &firstbyte, 1);
     memcpy(buf + 1, &secondbyte, 1);
-    sprintf((char*)(buf + 2), "%hu", seqnum);
-    sprintf((char*)(buf + 4), "%u", myFrame->timestamp + numpkts);
-    sprintf((char*)(buf + 8), "%u", ssrc);
-    
-    /* Last pakcet */
+    packi16(buf + 2, seqnum++);
+    pack32i(buf + 4, myFrame->timestamp);
+    pack32i(buf + 8, ssrc);
+    /*sprintf((char*)(buf + 4), "%u", htonl(myFrame->timestamp));
+    sprintf((char*)(buf + 8), "%u", htonl(ssrc)); */
+
+    /* Last packet */
     if (remains <= spaceForData) {
       memcpy(buf + 12, myFrame->data, remains);
       remains -= remains;
@@ -44,11 +64,13 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
       memcpy(buf + 12, myFrame->data, spaceForData);
       remains -= spaceForData;
     }
-    
+
     send_all(sockfd, buf, buflen);
 
     numpkts++;
   }
 
   return numpkts;
+
 }
+
