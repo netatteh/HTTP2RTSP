@@ -217,8 +217,12 @@ int rtsp_describe(const RTSPMsg *msg, unsigned char *buf)
   sprintf(newmsg.data, 
       "v=0\r\no=atte\r\ns=mpeg4video\r\n"
       "t=0 0\r\na=recvonly\r\nm=video 40404 RTP/AVP 96\r\n"
+      "b=AS:127\r\n"
       "a=rtpmap:96 H264/90000\r\n"
-      "a=fmtp:96 profile-level-id=42C00D; packetization-mode=1; sprop-parameter-sets=Z0LADZpzAoP2AiAAAAMAIAAAAwPR4oVN,aM48gA==\r\n");
+      "a=control:trackID=65536\r\n"
+      "a=fmtp:96 profile-level-id=42C00D; packetization-mode=1; sprop-parameter-sets=Z0LADZpzAoP2AiAAAAMAIAAAAwPR4oVN,aM48gA==\r\n"
+      "a=framesize:96 320-240\r\n");
+
   
   newmsg.contentlen = strlen(newmsg.data);
   newmsg.fields |= (F_DATE | F_CONTTYPE | F_DATA | F_CONTLEN);

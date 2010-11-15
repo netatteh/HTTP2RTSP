@@ -28,6 +28,7 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
   unsigned char secondbyte;
 
   size_t buflen;
+  uint8_t *stepper;
   int numpkts, remains, spaceForData;
 
   /* RTP header takes 12 bytes */
@@ -35,12 +36,13 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
 
   remains = myFrame->size;
   numpkts = 0;
+  stepper = myFrame->data;
 
   while (remains > 0) {
     /* Last packet */
     if (remains <= spaceForData) {
       buflen = remains + 12;
-      secondbyte = MARKEDSECONDBYTE;
+      secondbyte = UNMARKEDSECONDBYTE;
     }
     /* "Full packet" */
     else {
@@ -57,12 +59,13 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
 
     /* Last packet */
     if (remains <= spaceForData) {
-      memcpy(buf + 12, myFrame->data, remains);
+      memcpy(buf + 12, stepper, remains);
       remains -= remains;
     }
     else {
-      memcpy(buf + 12, myFrame->data, spaceForData);
+      memcpy(buf + 12, stepper, spaceForData);
       remains -= spaceForData;
+      stepper += spaceForData;
     }
 
     send_all(sockfd, buf, buflen);
