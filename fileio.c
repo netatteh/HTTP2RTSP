@@ -91,7 +91,7 @@ void write_log(int fd, char *format, ...)
 /* Lock the given mutex */
 void lock_mutex(pthread_mutex_t *mut)
 {
-    printf("Process %d locking mutex\n", getpid());
+    /* printf("Process %d locking mutex\n", getpid()); */
     if (pthread_mutex_lock(mut) != 0)
     {
         fatal_error("Locking mutex failed");    
@@ -103,7 +103,7 @@ void lock_mutex(pthread_mutex_t *mut)
 /* Unlocks the given mutex */
 void unlock_mutex(pthread_mutex_t *mut)
 {
-    printf("Process %d unlocking mutex\n", getpid());
+    /* printf("Process %d unlocking mutex\n", getpid()); */
     if (pthread_mutex_unlock(mut) != 0)
     {
         fatal_error("Unlocking mutex failed");    

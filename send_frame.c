@@ -24,8 +24,8 @@ void pack32i(unsigned char *buf, uint32_t src)
 
 
 int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t seqnum) {
-  const unsigned char firstbyte = 0x80;
-  const unsigned char secondbyte = 0x60;
+  const unsigned char firstbyte = FIRSTBYTE;
+  unsigned char secondbyte;
 
   size_t buflen;
   int numpkts, remains, spaceForData;
@@ -40,10 +40,12 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
     /* Last packet */
     if (remains <= spaceForData) {
       buflen = remains + 12;
+      secondbyte = MARKEDSECONDBYTE;
     }
     /* "Full packet" */
     else {
       buflen = spaceForData + 12;
+      secondbyte = UNMARKEDSECONDBYTE;
     }
 
     bzero(buf, BUFSIZE);
@@ -52,8 +54,6 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
     packi16(buf + 2, seqnum++);
     pack32i(buf + 4, myFrame->timestamp);
     pack32i(buf + 8, ssrc);
-    /*sprintf((char*)(buf + 4), "%u", htonl(myFrame->timestamp));
-    sprintf((char*)(buf + 8), "%u", htonl(ssrc)); */
 
     /* Last packet */
     if (remains <= spaceForData) {

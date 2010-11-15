@@ -5,7 +5,7 @@
 #include "parse_video.h"
 
 
-#define QUEUESIZE 400
+#define QUEUESIZE 100
 
 enum mediastates
 {

@@ -70,7 +70,8 @@ int get_frame(AVFormatContext *ctx, struct frame *myFrame, int videoIdx, int aud
       myFrame->timestamp = (int)round(packet.pts * 90000.0/videoRate);
     }
     if (packet.stream_index == audioIdx) {
-      myFrame->timestamp = (int)round(packet.pts * 90000.0/audioRate);
+      /* TODO: Hardcoded audio fps, should be fixed */
+      myFrame->timestamp = (int)round(packet.pts * 90000.0/50);
     }
 
     ret = packet.stream_index;

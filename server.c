@@ -58,7 +58,7 @@ void push_event(TimeoutEvent *event, Queue *queue)
     queue->first = queue->last = event;
   }
   else {
-    while (timecmp(stepper->time, event->time) <= 0 && stepper != NULL) {
+    while (stepper != NULL && timecmp(stepper->time, event->time) <= 0) {
       stepper = stepper->prev;
     }
     if (stepper == NULL) {
@@ -93,6 +93,7 @@ TimeoutEvent *pull_event(Queue *queue)
   else {
     printf("The queue was empty");
   }
+  printf("Time - secs: %ld, usecs: %ld\n", ret->time.tv_sec, ret->time.tv_usec);
 
   return ret;
 }
@@ -100,8 +101,8 @@ TimeoutEvent *pull_event(Queue *queue)
 
 void set_timeval(TimeoutEvent *event, struct timeval base)
 {
-  event->time.tv_sec = base.tv_sec + event->frame->timestamp / 90000;
-  event->time.tv_usec = base.tv_usec + (event->frame->timestamp % 90000) / 0.09;
+  event->time.tv_sec = base.tv_sec + (event->frame->timestamp / 90000);
+  event->time.tv_usec = base.tv_usec + ((event->frame->timestamp % 90000) / 0.09);
   if (event->time.tv_usec >= 1000000) {
     event->time.tv_usec -= 1000000;
     event->time.tv_sec++;
@@ -119,8 +120,6 @@ struct timeval calculate_delta(struct timeval *first, struct timeval *second)
     delta.tv_usec += 1000000;
     delta.tv_sec--;
   }
-
-  printf("Delta: %ld sec, %ld usec\n", delta.tv_sec, delta.tv_usec);
 
   return delta;
 }
@@ -207,6 +206,7 @@ void *fill_queue(void *base)
 
       unlock_mutex(&queuelock);
       mutlocked = 0;
+      usleep(10000);
 
 
     } /* End of inner while loop */
@@ -269,20 +269,12 @@ int start_server(const char *url, const char *rtspport)
 
     readfds = masterfds;
 
-    if (timeind == NULL) {
-      printf("Select has no timeout!\n");
-    }
-    else {
-      printf("Timeout: %ld secs, %ld usecs\n", timeind->tv_sec, timeind->tv_usec);
-    }
-
     if ((nready = Select(maxfd + 1, &readfds, timeind)) == -1) {
       write_log(logfd, "Select interrupted by a signal\n");
     } 
 
     /* Timeout handling, used for packet pacing and other timeouts */
     else if (nready == 0) {
-      printf("Select timed out!\n");
       timeind = NULL;
       lock_mutex(&queuelock);
       if ((event = pull_event(&queue)) != NULL) {
@@ -293,7 +285,6 @@ int start_server(const char *url, const char *rtspport)
           /* TODO: For now only video frames are sent */
           if (event->frame->frametype == VIDEO_FRAME) {
             rtpseqno += send_frame(sendbuf, event->frame, streamclient.videofds[0], rtpseqno);
-            printf("rtpseqno: %d\n", rtpseqno);
           }
 
           free(event->frame->data);
@@ -309,10 +300,13 @@ int start_server(const char *url, const char *rtspport)
         if (queue.first != NULL) {
           *timeout = calculate_delta(&event->time, &queue.first->time);
           timeind = timeout;
+          printf("Timeout: %ld secs, %ld usecs\n", timeout->tv_sec, timeout->tv_usec);
         }
         else {
           printf("The first entry of the queue is NULL!\n");
         }
+
+        if (queue.size < QUEUESIZE / 2) pthread_cond_signal(&queuecond);
 
         free(event);
       }
@@ -351,7 +345,6 @@ int start_server(const char *url, const char *rtspport)
         /* Data from the media source */
         else if (i == mediafd) {
 
-          printf("Received stuff on mediafd\n");
           switch (mediastate) {
 
             case GETSENT:
