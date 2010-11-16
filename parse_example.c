@@ -23,13 +23,23 @@ int main(int argc, char *argv[]) {
   vid = aud = a = 0;
   for (i=0; i<100; i++) {   
     temp = get_frame(ctx, myFrame, videoIdx, audioIdx, videoRate, audioRate);
+    if (temp == -1) break;
 
     if (temp == videoIdx) {
       vid++;
+      printf("Video %i, timestamp %i, size %i\n", vid, myFrame->timestamp, (int)myFrame->size);
+      data = myFrame->data;
+      printf("data: ");
+      for (a=0; a<myFrame->size; a++) {
+        printf("%x:", *data);
+        data++;
+      }
+      printf("\n");
     }
 
     else if (temp == audioIdx) {
       printf("Audio %i, timestamp %i, size %i\n", aud, myFrame->timestamp, (int)myFrame->size);
+      /*
       data = myFrame->data;
       printf("data: ");
       for (a=0; a<myFrame->size; a++) {
@@ -37,6 +47,7 @@ int main(int argc, char *argv[]) {
         data++;
       }
       printf("\n");
+      */
 
       aud++;
     }

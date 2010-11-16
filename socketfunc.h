@@ -6,7 +6,7 @@
 
 #define PORTINUSE -2
 #define GENERALERROR -3
-#define BUFSIZE 1200
+#define BUFSIZE 1300
 
 /* A wrapper for getaddrinfo(). In case of error exits the program. */
 int resolve_host(const char *hostname, const char *port, int socktype, 

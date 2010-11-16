@@ -215,8 +215,11 @@ int rtsp_describe(const RTSPMsg *msg, unsigned char *buf)
   sprintf(newmsg.date, "%s", timebuf);
   sprintf(newmsg.contenttype, "application/sdp");
   sprintf(newmsg.data, 
-      "v=0\r\no=atte\r\ns=mpeg4video\r\n"
-      "t=0 0\r\na=recvonly\r\nm=video 40404 RTP/AVP 96\r\n"
+      "v=0\r\no=atte\r\n"
+      "s=mpeg4video\r\n"
+      "t=0 0\r\n"
+      "a=recvonly\r\n"
+      "m=video 40404 RTP/AVP 96\r\n"
       "b=AS:127\r\n"
       "a=rtpmap:96 H264/90000\r\n"
       "a=control:trackID=65536\r\n"
