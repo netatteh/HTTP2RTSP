@@ -29,20 +29,24 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
 
   size_t buflen;
   uint8_t *datastep;
-  uint8_t nalbyte = 0x1;
-  unsigned char *bufstep = buf;
-  int numpkts, remains, spaceForData;
+  unsigned char *bufstep;
+  uint8_t nalbyte = myFrame->data[4];
+  uint8_t origtype = nalbyte & 0x1f;
+  uint8_t fragtype = 0x1c;
+  uint8_t fustart = 0x4, fuend = 0x2;
+  int numpkts, remains, spaceForData, firstpacket = 1;
 
   /* RTP header takes 12 bytes */
   spaceForData = BUFSIZE - 12;
 
-  remains = myFrame->size;
+  remains = myFrame->size - 4;
   numpkts = 0;
-  datastep = myFrame->data;
+  datastep = myFrame->data + 4;
 
   while (remains > 0) {
     
     bzero(buf, BUFSIZE);
+    bufstep = buf;
 
     /* Last packet */
     if (remains <= spaceForData) {
@@ -55,21 +59,51 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
       secondbyte = UNMARKEDSECONDBYTE;
     }
 
-    memcpy(buf, &firstbyte, 1);
-    memcpy(buf + 1, &secondbyte, 1);
-    packi16(buf + 2, seqnum++);
-    pack32i(buf + 4, myFrame->timestamp);
-    pack32i(buf + 8, ssrc);
+    memcpy(bufstep, &firstbyte, 1);
+    memcpy(bufstep + 1, &secondbyte, 1);
+    packi16(bufstep + 2, seqnum++);
+    pack32i(bufstep + 4, myFrame->timestamp);
+    pack32i(bufstep + 8, ssrc);
+    bufstep += 12;
 
-    /* Last packet */
-    if (remains <= spaceForData) {
-      memcpy(bufstep + 12, datastep, remains);
+    /* Beginning of copying nals and data */
+
+    /* The first packet of a possibly fragmented unit */
+    if (firstpacket) {
+      firstpacket = 0;
+
+      /* The packet needs fragmenting */
+      if (spaceForData / remains < 1) {
+        datastep++;
+        *bufstep++ = (nalbyte & 0xe0) | fragtype;
+        *bufstep++ = (fustart << 5) | origtype;
+        memcpy(bufstep, datastep, spaceForData - 2);
+        remains -= spaceForData - 2;
+        datastep += spaceForData - 2; 
+      }
+
+      /* No fragmenting required */
+      else {
+        memcpy(bufstep, datastep, remains);
+        remains -= remains;
+      }
+    }
+
+    /* The last packet of a fragmented unit */
+    else if (remains <= spaceForData - 2) {
+      *bufstep++ = (nalbyte & 0xe0) | fragtype;
+      *bufstep++ = (fuend << 5) | origtype;
+      memcpy(bufstep, datastep, remains);
       remains -= remains;
     }
+
+    /* An intermediary packet */
     else {
-      memcpy(buf + 12, datastep, spaceForData);
-      remains -= spaceForData;
-      datastep += spaceForData;
+      *bufstep++ = (nalbyte & 0xe0) | fragtype;
+      *bufstep++ = origtype;
+      memcpy(bufstep, datastep, spaceForData - 2);
+      remains -= spaceForData - 2;
+      datastep += spaceForData - 2;
     }
 
     send_all(sockfd, buf, buflen);
