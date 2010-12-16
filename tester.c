@@ -8,6 +8,7 @@
 
 int main()
 {
+  /*
   char *url1 = "http://www.netlab.tkk.fi/~varun/videos";
   char *url2 = "www.netlab.tkk.fi/~varun/videos";
   char *test1 = "Transport: RTP/AVP;unicast;client_port=40404-40405";
@@ -41,6 +42,7 @@ int main()
   msg.type = DESCRIBE;
   rtsp_describe(&msg, buffer);
   printf("%s", buffer);
+  */
 
   return 0;
 }

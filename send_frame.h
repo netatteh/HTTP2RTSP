@@ -7,8 +7,12 @@
 #define MARKEDSECONDBYTE 0xe0
 #define UNMARKEDSECONDBYTE 0x60
 
-/* Packs frame into one or more RTP packets and sends to sockd */
-/* Returns the number of packets that were sent */
+/* Packs frame into one or more RTP packets and sends to sockd
+ * Returns the number of packets that were sent */
 int send_frame(unsigned char *buf, struct frame *myframe, int sockfd, uint16_t seqnum);
+
+/* Sends an rtp packet with a correct format and an empty payload. 
+ * Used to delay the timeout at PLAY stage if still downloading a file. */
+void send_dummy_rtp(unsigned char *sendbuf, int sockfd, uint16_t *seqnum);
 
 #endif

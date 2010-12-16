@@ -5,7 +5,7 @@
 #include "parse_video.h"
 
 
-#define QUEUESIZE 100
+#define QUEUESIZE 200
 
 enum mediastates
 {
@@ -37,6 +37,8 @@ typedef struct client
   int rtspfd;
   int session;
   int cseq;
+  int server_rtp_port;
+  int server_rtcp_port;
   int videofds[2];
   int audiofds[2];
 } Client;
@@ -56,6 +58,13 @@ typedef struct queue
   TimeoutEvent *first, *last;
   int size;
 } Queue;
+
+typedef struct thread_info
+{
+  AVFormatContext *ctx;
+  int videoIdx, audioIdx;
+  double videoRate, audioRate;
+} ThreadInfo;
 
 void init_client(Client *client);
 
@@ -85,6 +94,7 @@ int timecmp(struct timeval first, struct timeval second);
 /* Calculates the difference between two time instants, (second - first) */
 struct timeval caclulate_delta(struct timeval *first, struct timeval *second);
 
+Frame *create_sprop_frame(unsigned char *sps, size_t spslen, uint32_t ts);
 
 #endif
 

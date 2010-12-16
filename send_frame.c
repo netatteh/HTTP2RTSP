@@ -115,3 +115,32 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
 
 }
 
+
+void send_dummy_rtp(unsigned char *sendbuf, int sockfd, uint16_t *seqnum)
+{
+  unsigned char firstbyte = FIRSTBYTE;
+  unsigned char secondbyte = UNMARKEDSECONDBYTE;
+
+  memset(sendbuf, 0, BUFSIZE);
+  memcpy(sendbuf, &firstbyte, 1);
+  memcpy(sendbuf + 1, &secondbyte, 1);
+  packi16(sendbuf + 2, (*seqnum)++);
+  pack32i(sendbuf + 4, 0);
+  pack32i(sendbuf + 8, ssrc);
+
+  send_all(sockfd, sendbuf, 12);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

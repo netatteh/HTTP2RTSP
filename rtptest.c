@@ -5,6 +5,7 @@
 int logfd;
 
 int main(int argc, char *argv[]) {
+  /*
   AVFormatContext *ctx;
   int videoidx, audioidx, i, sockfd, temp;
   uint16_t seqnum;
@@ -14,7 +15,7 @@ int main(int argc, char *argv[]) {
 
   logfd = 0;
 
-  /* int send_frame(unsigned char *buf, struct frame *myframe, int sockfd, uint16_t seqnum); */
+  int send_frame(unsigned char *buf, struct frame *myframe, int sockfd, uint16_t seqnum);
   sockfd = 0;
 
   if (argc != 2) {
@@ -40,5 +41,6 @@ int main(int argc, char *argv[]) {
 
   free(myFrame);
   free(buf);
+  */
   return 0;
 }

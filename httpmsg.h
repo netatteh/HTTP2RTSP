@@ -1,6 +1,8 @@
 #ifndef HTTP2RTSP_HTTP_MSG_H
 #define HTTP2RTSP_HTTP_MSG_H
 
+#include "server.h"
+
 #define URLSIZE 500
 #define FIELDLEN 100
 #define PORTLEN 10
@@ -69,15 +71,16 @@ int parse_rtsp(RTSPMsg *msg, const unsigned char *buffer);
  * to the given buffer. For now assumes that an RTSP/1.0 200 OK is sent */
 int write_rtsp(const RTSPMsg *msg, unsigned char *buffer);
 
-int rtsp_options(const RTSPMsg *msg, unsigned char *buf);
+int rtsp_options(const RTSPMsg *msg, Client *client, unsigned char *buf);
 
-int rtsp_describe(const RTSPMsg *msg, unsigned char *buf);
+int rtsp_describe(Client *client, unsigned char *buf);
 
-int rtsp_setup(const RTSPMsg *msg, unsigned char *buf, int rtpport, int rtcpport);
+int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf);
 
 int rtsp_play(const RTSPMsg *msg, unsigned char *buf);
 
 int rtsp_ping(unsigned char *buf, int session);
+
 
 #endif
 

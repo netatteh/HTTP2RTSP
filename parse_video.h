@@ -16,11 +16,13 @@ typedef struct frame {
   int frametype;
 } Frame;
 
-/* Call this function to oprn the file and initialize AVFormatContext
-   Returns: number of streams in the filee (1 if only video, 2 if video&audio,
-   -1 if there's an error */
+/* Call this function to oprn the file and initialize AVFormatContext. 
+ * Creates the SDP of the file and stores it into the 'sdpbuf'
+ * Returns: number of streams in the filee (1 if only video, 2 if video&audio,
+ * -1 if there's an error. */
 int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int *audioIdx,
-		       double *videoRate, double *audioRate);
+		       double *videoRate, double *audioRate, unsigned char **sps, size_t *spslen,
+           unsigned char **pps, size_t *ppslen);
 
 /* Call this in a loop to get the frames
    Allocate memory for myFrame yourself, the function will then fill it for you

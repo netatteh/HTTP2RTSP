@@ -41,6 +41,10 @@ void init_client(Client *client)
 {
   client->state = NOCLIENT;
   client->rtspfd = -1;
+  client->session = 0;
+  client->cseq = 0;
+  client->server_rtp_port = 50508;
+  client->server_rtcp_port = 50509;
   client->videofds[0] = -1;
   client->videofds[1] = -1;
   client->audiofds[0] = -1;
@@ -51,9 +55,11 @@ void init_client(Client *client)
 void push_event(TimeoutEvent *event, Queue *queue)
 {
   TimeoutEvent *stepper = queue->last;
+  event->prev = event->next = NULL;
 
   printf("Pushing to queue...\n");
   fflush(stdout);
+
   if (stepper == NULL) {
     queue->first = queue->last = event;
   }
@@ -89,6 +95,9 @@ TimeoutEvent *pull_event(Queue *queue)
     queue->first = queue->first->next;  
     remque(ret);
     queue->size--;
+    if (queue->size <= 0) {
+      queue->first = queue->last = NULL;
+    }
   }
   else {
     printf("The queue was empty");
@@ -99,8 +108,30 @@ TimeoutEvent *pull_event(Queue *queue)
 }
 
 
+void push_timeout(Queue *queue, int time_ms, int type)
+{
+  struct timeval timeout, now;
+
+  TimeoutEvent *event = (TimeoutEvent *)malloc(sizeof(TimeoutEvent));
+
+  CHECK((gettimeofday(&now, NULL)) == 0);
+  timeout.tv_sec = now.tv_sec + (time_ms / 1000);
+  timeout.tv_usec = now.tv_usec + (time_ms % 1000) * 1000;
+
+  event->time = timeout;
+  event->next = event->prev = NULL;
+  event->type = type;
+  event->frame = NULL;
+
+  push_event(event, queue);
+}
+
+
 void set_timeval(TimeoutEvent *event, struct timeval base)
 {
+  char *type = (event->frame->frametype == VIDEO_FRAME)?"Video":"Audio";
+  printf("%s timestamp: %d\n", type, event->frame->timestamp);
+
   event->time.tv_sec = base.tv_sec + (event->frame->timestamp / 90000);
   event->time.tv_usec = base.tv_usec + ((event->frame->timestamp % 90000) / 0.09);
   if (event->time.tv_usec >= 1000000) {
@@ -131,40 +162,33 @@ int timecmp(struct timeval first, struct timeval second)
   return (delta.tv_sec != 0)?delta.tv_sec:delta.tv_usec;
 }
 
-
-void push_timeout(Queue *queue, int time_ms, int type)
+Frame *create_sprop_frame(unsigned char *ps, size_t pslen, uint32_t ts)
 {
-  struct timeval timeout, now;
+  struct timeval time;
 
-  TimeoutEvent *event = (TimeoutEvent *)malloc(sizeof(TimeoutEvent));
+  Frame *frame = (Frame *)malloc(sizeof(Frame));
+  frame->data = (uint8_t *)malloc(pslen + 4);
 
-  CHECK((gettimeofday(&now, NULL)) == 0);
-  timeout.tv_sec = now.tv_sec + (time_ms / 1000);
-  timeout.tv_usec = now.tv_usec + (time_ms % 1000) * 1000;
+  CHECK((gettimeofday(&time, NULL)) == 0);
 
-  event->time = timeout;
-  event->next = event->prev = NULL;
-  event->type = type;
-  event->frame = NULL;
+  frame->size = pslen + 4;
+  frame->frametype = VIDEO_FRAME;
+  frame->timestamp = ts;
 
-  lock_mutex(&queuelock);
-  push_event(event, queue);
-  unlock_mutex(&queuelock);
+  memcpy(frame->data + 4, ps, pslen);
+
+  return frame;
 }
 
 
-void *fill_queue(void *base)
+void *fill_queue(void *thread_params)
 {
-  AVFormatContext *ctx;
-  int videoIdx, audioIdx;
-  double videoRate, audioRate;
   struct timeval basetime;
   int frametype;
   int quitflag = 0, mutlocked = 0, timeset = 0;
   Frame *frame;
   TimeoutEvent *event;
-
-  initialize_context(&ctx, "videotemp.mp4", &videoIdx, &audioIdx, &videoRate, &audioRate);
+  ThreadInfo *tinfo = (ThreadInfo *)thread_params;
 
 
   while (!quitflag) {
@@ -188,18 +212,18 @@ void *fill_queue(void *base)
       frame = (Frame *)malloc(sizeof(Frame));
 
       /* Get the frame. If none are available, end the loop and the entire function. */
-      if ((frametype = get_frame(ctx, frame, videoIdx, audioIdx, videoRate, audioRate)) == -1) {
+      if ((frametype = get_frame(tinfo->ctx, frame, tinfo->videoIdx, 
+              tinfo->audioIdx, tinfo->videoRate, tinfo->audioRate)) == -1) {
         printf("EOF from the media file!\n");
         quitflag = 1;
       }
       else {
-        frame->frametype = (frametype == videoIdx)?VIDEO_FRAME:AUDIO_FRAME;
+        frame->frametype = (frametype == tinfo->videoIdx)?VIDEO_FRAME:AUDIO_FRAME;
 
         event = (TimeoutEvent *)malloc(sizeof(TimeoutEvent));
         event->frame = frame;
         event->type = FRAME;
         set_timeval(event, basetime);
-        event->next = event->prev = NULL;
 
         push_event(event, &queue);
       }
@@ -227,18 +251,21 @@ int start_server(const char *url, const char *rtspport)
   struct sockaddr_storage remoteaddr;
   socklen_t addrlen = sizeof remoteaddr;
   fd_set readfds, masterfds;
-  struct timeval *timeout, *timeind = NULL;
+  struct timeval *timeout, *timeind = NULL, timenow;
   int nready, i;
   int videosize, videoleft;
   int recvd, sent;
   char urlhost[URLSIZE], urlpath[URLSIZE], tempstr[URLSIZE];
   unsigned char msgbuf[BUFSIZE], sendbuf[BUFSIZE];
   char *temp;
+  unsigned char *sps = NULL, *pps = NULL;
+  size_t spslen, ppslen;
   RTSPMsg rtspmsg;
   Client streamclient;
   pthread_t threadid;
+  ThreadInfo *tinfo = NULL;
 
-  int rtpseqno = (rand() % 1000000);
+  uint16_t rtpseqno = (rand() % 1000000);
   TimeoutEvent *event;
 
   /* The current state of the protocol */
@@ -246,8 +273,8 @@ int start_server(const char *url, const char *rtspport)
   int quit = 0;
 
   timeout = (struct timeval *)malloc(sizeof(struct timeval));
-  
   init_client(&streamclient);
+  
 
   /* Open the a file where the video is to be stored */
   if ((videofd = open("videotemp.mp4", O_RDWR | O_CREAT | O_TRUNC, S_IRWXU)) < 0) {
@@ -291,13 +318,21 @@ int start_server(const char *url, const char *rtspport)
           free(event->frame);
           break;
 
+          case CHECKMEDIASTATE:
+            printf("Timeout handling checking media state...\n");
+            if (mediastate != STREAM) {
+              send_dummy_rtp(sendbuf, streamclient.videofds[0], &rtpseqno);
+              push_timeout(&queue, 1000, CHECKMEDIASTATE);
+            }
+          break;
+
           default:
             printf("ERRORENOUS EVENT TYPE!\n");
           break;
         }
 
         /* If there are elements left in the queue, calculate next timeout */
-        if (queue.first != NULL) {
+        if (queue.size > 0) {
           *timeout = calculate_delta(&event->time, &queue.first->time);
           timeind = timeout;
           printf("Timeout: %ld secs, %ld usecs\n", timeout->tv_sec, timeout->tv_usec);
@@ -326,8 +361,7 @@ int start_server(const char *url, const char *rtspport)
           printf("Recieved a new connection to listenfd\n");
           if ((tempfd = accept(i, (struct sockaddr *)&remoteaddr, &addrlen)) == -1) {
             if (errno != EWOULDBLOCK && errno != ECONNABORTED &&
-                errno != EPROTO && errno != EINTR)
-            {
+                errno != EPROTO && errno != EINTR) {
               fatal_error("accept");
             }
           }
@@ -364,6 +398,7 @@ int start_server(const char *url, const char *rtspport)
                 close(i);
                 printf("Socket closed\n");
               }
+              printf("Received data from video source!\n");
 
               writestr(videofd, msgbuf, recvd);
               videoleft -= recvd;
@@ -373,16 +408,31 @@ int start_server(const char *url, const char *rtspport)
                 FD_CLR(mediafd, &masterfds);
                 close(videofd);
                 close(mediafd);
-                mediastate = STREAM;
 
-                CHECK((pthread_create(&threadid, NULL, fill_queue, NULL)) == 0);
+                /* Create the context and the queue filler thread parameter struct */
+                tinfo = (ThreadInfo *)malloc(sizeof(ThreadInfo));
+                initialize_context(&tinfo->ctx, "videotemp.mp4", &tinfo->videoIdx, &tinfo->audioIdx,
+                    &tinfo->videoRate, &tinfo->audioRate, &sps, &spslen, &pps, &ppslen);
+
+                send_frame(sendbuf, create_sprop_frame(sps, spslen, 0), streamclient.videofds[0], rtpseqno++);
+                send_frame(sendbuf, create_sprop_frame(pps, ppslen, 0), streamclient.videofds[0], rtpseqno++);
+
+                CHECK((pthread_create(&threadid, NULL, fill_queue, tinfo)) == 0);
                 pthread_detach(threadid);
-                sleep(3);
-                pthread_cond_signal(&queuecond);
-                streamclient.state = STREAMING;
-                timeout->tv_sec = 1;
-                timeout->tv_usec = 0;
-                timeind = timeout;
+
+                lock_mutex(&queuelock);
+                push_timeout(&queue, 1000, CHECKMEDIASTATE);
+                unlock_mutex(&queuelock);
+
+                
+                /* Send the SPS and PPS in-band
+                sent = build_parameter_set(sps, spslen, sendbuf);
+                send_all(streamclient.videofds[0], sendbuf, sent);
+                sent = build_parameter_set(pps, ppslen, sendbuf);
+                send_all(streamclient.videofds[0], sendbuf, sent);
+                */
+
+                mediastate = STREAM;
               }
               break;
 
@@ -421,7 +471,7 @@ int start_server(const char *url, const char *rtspport)
 
             case CLICONNECTED:
               if (rtspmsg.type == OPTIONS) {
-                sent = rtsp_options(&rtspmsg, sendbuf);
+                sent = rtsp_options(&rtspmsg, &streamclient, sendbuf);
                 send_all(i, sendbuf, sent);
               }
               else if (rtspmsg.type == DESCRIBE) {
@@ -438,10 +488,11 @@ int start_server(const char *url, const char *rtspport)
                 send_all(mediafd, msgbuf, strlen((char *)msgbuf));
                 mediastate = GETSENT;
 
-                /* TODO: parse SDP from the media file rather than hardcoding it */
-                sent = rtsp_describe(&rtspmsg, sendbuf);
-                send_all(i, sendbuf, sent);
+                /* Send the SDP without sprop-parameter-sets, those are sent
+                 * later in-band */
                 streamclient.state = SDPSENT;
+                sent = rtsp_describe(&streamclient, sendbuf);
+                send_all(i, sendbuf, sent);
               }
               break;
 
@@ -450,11 +501,12 @@ int start_server(const char *url, const char *rtspport)
                 /* Open up the needed ports and bind them locally */
                 write_remote_ip(tempstr, streamclient.rtspfd);
                 resolve_host(tempstr, rtspmsg.clirtpport, 0, SOCK_DGRAM, &info); 
-                streamclient.videofds[0] = client_socket(info, 50508);
+                streamclient.videofds[0] = client_socket(info, streamclient.server_rtp_port);
                 resolve_host(tempstr, rtspmsg.clirtcpport, 0, SOCK_DGRAM, &info);
-                streamclient.videofds[1] = client_socket(info, 50509);
+                streamclient.videofds[1] = client_socket(info, streamclient.server_rtcp_port);
 
-                sent = rtsp_setup(&rtspmsg, sendbuf, 50508, 50509);
+
+                sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf);
                 send_all(i, sendbuf, sent);
                 streamclient.state = SETUPSENT;
 
@@ -465,7 +517,9 @@ int start_server(const char *url, const char *rtspport)
               if (rtspmsg.type == PLAY) {
                 sent = rtsp_play(&rtspmsg, sendbuf);
                 send_all(i, sendbuf, sent);
-
+                lock_mutex(&queuelock);
+                push_timeout(&queue, 100, CHECKMEDIASTATE);
+                unlock_mutex(&queuelock);
               }
               
               break;
@@ -475,8 +529,26 @@ int start_server(const char *url, const char *rtspport)
           }
         }
       }
+
       if (nready <= 0) break;   
     }
+
+    /* Set the timeout value again, since select will mess it up */
+    lock_mutex(&queuelock);
+    if (queue.size > 0) {
+      CHECK((gettimeofday(&timenow, NULL)) == 0);
+      *timeout = calculate_delta(&timenow, &queue.first->time);
+      printf("Delta sec: %ld, Delta usec: %ld\n", timeout->tv_sec, timeout->tv_usec);
+
+      if (timeout->tv_sec < 0) {
+        timeout->tv_sec = 0;
+        timeout->tv_usec = 0;
+      }
+
+      timeind = timeout;
+    }
+    else timeind = NULL;
+    unlock_mutex(&queuelock);
 
   }
 

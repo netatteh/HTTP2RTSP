@@ -1,12 +1,12 @@
-CC=gcc
+CC=gcc `pkg-config --libs --cflags glib-2.0`
 CFLAGS=-g3 -Wall -Wextra -pedantic
-LDFLAGS=-lavformat -lavcodec
+LDFLAGS=-lavformat -lavcodec 
 
 SUFFIXES=.c .o
 
 PROGS=http2rtsp tester parsetest timeouttest rtptest
 
-all: $(PROGS) cleano
+all: $(PROGS)
 
 .c.o:	
 	$(CC) $(CFLAGS) -c $<

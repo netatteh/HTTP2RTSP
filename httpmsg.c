@@ -186,11 +186,12 @@ int write_rtsp(const RTSPMsg *msg, unsigned char *buffer)
 }
 
 
-int rtsp_options(const RTSPMsg *msg, unsigned char *buf)
+int rtsp_options(const RTSPMsg *msg, Client *client, unsigned char *buf)
 {
   RTSPMsg newmsg;
   char *temp;
   
+  client->cseq = msg->cseq + 1;
   memset(&newmsg, 0, sizeof(RTSPMsg));
   newmsg = *msg;
   temp = (char *)buf + write_rtsp(&newmsg, buf) - 2;
@@ -201,11 +202,14 @@ int rtsp_options(const RTSPMsg *msg, unsigned char *buf)
 
 
 /* TODO: The date format is probably wrong, lets see if it works anyway */
-int rtsp_describe(const RTSPMsg *msg, unsigned char *buf)
+int rtsp_describe(Client *client, unsigned char *buf)
 {
   char timebuf[50];
   time_t timeint;
-  RTSPMsg newmsg = *msg;
+  RTSPMsg newmsg;
+
+  newmsg.fields = (F_CSEQ | F_DATE | F_CONTTYPE | F_CONTLEN | F_DATA);
+  newmsg.cseq = client->cseq++;
 
   memset(timebuf, 0, 50);
   time(&timeint);
@@ -214,33 +218,31 @@ int rtsp_describe(const RTSPMsg *msg, unsigned char *buf)
 
   sprintf(newmsg.date, "%s", timebuf);
   sprintf(newmsg.contenttype, "application/sdp");
+
   sprintf(newmsg.data, 
-      "v=0\r\no=atte\r\n"
+      "v=0\r\n"
+      "o=testi\r\n"
       "s=mpeg4video\r\n"
       "t=0 0\r\n"
       "a=recvonly\r\n"
       "m=video 40404 RTP/AVP 96\r\n"
-      "b=AS:127\r\n"
       "a=rtpmap:96 H264/90000\r\n"
-      "a=control:trackID=65536\r\n"
-      "a=fmtp:96 profile-level-id=42C00D; packetization-mode=1; sprop-parameter-sets=Z0LADZpzAoP2AiAAAAMAIAAAAwPR4oVN,aM48gA==\r\n"
-      "a=framesize:96 320-240\r\n");
-
-  
+      "a=fmtp:96 packetization-mode=1\r\n" 
+      );
   newmsg.contentlen = strlen(newmsg.data);
-  newmsg.fields |= (F_DATE | F_CONTTYPE | F_DATA | F_CONTLEN);
 
   return write_rtsp(&newmsg, buf);
   
 }
 
 
-int rtsp_setup(const RTSPMsg *msg, unsigned char *buf, int rtpport, int rtcpport)
+int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf)
 {
   RTSPMsg newmsg = *msg;
-  newmsg.session = (rand() % 1000000);
+  newmsg.session = client->session = (rand() % 1000000);
   newmsg.fields |= F_SESSION;
-  sprintf(newmsg.transport + strlen(newmsg.transport), ";server_port=%d-%d", rtpport, rtcpport);
+  sprintf(newmsg.transport + strlen(newmsg.transport), ";server_port=%d-%d",
+      client->server_rtp_port, client->server_rtcp_port);
   
   return write_rtsp(&newmsg, buf);
 }
@@ -261,6 +263,4 @@ int rtsp_play(const RTSPMsg *msg, unsigned char *buf)
 
   return write_rtsp(&newmsg, buf); 
 }
-
-
 

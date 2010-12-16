@@ -20,6 +20,9 @@ int logfd;
 sig_atomic_t signo;
 
 
+
+
+
 void sig_handler(int signum)
 {
   signo = signum; 
