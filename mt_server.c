@@ -68,6 +68,10 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
   socklen_t clilen, rtpaddrlen;
   unsigned char sip_inbuf[BUFSIZE];
   unsigned char sip_outbuf[BUFSIZE];
+  fd_set sipmasterfds, sipwritefds;
+
+  FD_ZERO(&sipmasterfds);
+  FD_ZERO(&sipwritefds);
 
   /* Initialize SIP client list */
   for (k=0; k<MAXCLIENTS; k++) {
@@ -205,7 +209,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
 	  /* Received INVITE */
 	  if (sipmsg.type == INVITE) {
-	    printf("SIP INVITE received\n");
+	    write_log(logfd, "SIP INVITE received\n");
 
 	    if (nclients < MAXCLIENTS) {
 	      bzero(&ok, sizeof(&ok));
@@ -215,7 +219,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      write_sip(&ok, sip_outbuf, sipport);
 	      Sendto_all(siplistenfd, sip_outbuf, BUFSIZE, 0, &cliaddr, clilen);
 
-	      printf("SIP 200 OK sent\n");
+	      write_log(logfd, "SIP 200 OK sent\n");
 
 	      rtpaddr = cliaddr;
 
@@ -238,13 +242,16 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      for (k=0; k<MAXCLIENTS; k++) {
 		if (clientlist[k] == NULL) {
 		  clientlist[k] = client;
+		  FD_SET(clientlist[k]->sockfd, &sipmasterfds);
 		  nclients++;
+		  write_log(logfd, "SIP client accepted\n");
 		  break;
 		}
 	      }
 
 	    }
 	    else {
+	      write_log(logfd, "SIP client rejected: MAXCLIENTS reached\n");
 	      printf("SIP MAXCLIENTS reached! Cannot accept new SIP clients\n");
 	    }
 	  }
@@ -265,17 +272,18 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    /* Send OK message */
 	    create_ok(&sipmsg, &ok);
 	    write_sip(&ok, sip_outbuf, sipport);
-	    Sendto_all(listenfd, sip_outbuf, BUFLEN, 0, &cliaddr, clilen);
+	    Sendto_all(siplistenfd, sip_outbuf, BUFLEN, 0, &cliaddr, clilen);
 	    printf("SIP 200 OK sent\n");
+	    sleep(5);
 
 	    /* Find and remove client info */
 	    for (k=0; k<MAXCLIENTS; k++) {
 	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg.callid)==0) ) {
 		/* Remove client info */
+		FD_CLR(clientlist[k]->sockfd, &sipmasterfds);
 		close(clientlist[k]->sockfd);
 		free(clientlist[k]);
 		clientlist[k] = NULL;
-
 		nclients--;
 		break;
 	      }
