@@ -67,7 +67,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
   SIPClient *client;
   SIPClient *clientlist[MAXCLIENTS];
   struct sockaddr cliaddr, rtpaddr;
-  socklen_t clilen, rtpaddrlen;
+  socklen_t clilen;
   unsigned char sip_inbuf[BUFSIZE];
   unsigned char sip_outbuf[BUFSIZE];
   fd_set sipmasterfds, sipwritefds;
@@ -147,14 +147,22 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	  }
           break;
 
-	  /* case LASTFRAMEREAD */
-	  /* TEST: send BYE
-	  SIPMsg *bye = malloc(sizeof(SIPMsg));
-	  create_bye(bye, clientlist[k]);
-	  write_sip(bye, sip_outbuf, sipport);
+	case ENDOFSTREAM:
+	  /* TODO: send TEARDOWN to VLC */
 
-	  printf("BYE msg:\n%s\n", sip_outbuf);
-	  Sendto_all(siplistenfd, sip_outbuf, strlen(sip_outbuf), 0, &(clientlist[k]->cliaddr), sizeof(clientlist[k]->cliaddr)); */
+	  /* Send bye to SIP clients*/
+	  bzero(sip_outbuf, BUFSIZE);
+	  create_bye(&sipmsg, clientlist[k]);
+	  write_sip(&sipmsg, sip_outbuf, sipport);
+
+	  printf("Sending BYE to SIP clients...\n");
+
+	  for (k=0; k<MAXCLIENTS; k++) {
+	    if (clientlist[k] != NULL && clientlist[k]->ackrecvd == 1) {
+	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &(clientlist[k]->cliaddr), sizeof(clientlist[k]->cliaddr));
+	    }
+	  }
+	  break;
 
 	default:
 	  oma_debug_print("ERRORENOUS EVENT TYPE!\n");
