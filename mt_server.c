@@ -118,7 +118,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
           case FRAME:
           /* TODO: For now only video frames are sent */
           if (event->frame->frametype == VIDEO_FRAME) {
-            rtpseqno += send_frame(sendbuf, event->frame, streamclient.videofds[0], rtpseqno);
+            rtpseqno += send_video_frame(sendbuf, event->frame, streamclient.videofds[0], rtpseqno);
           }
 	  /* It's an audio frame */
 	  else {
@@ -334,8 +334,8 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
                 initialize_context(&tinfo->ctx, "videotemp.mp4", &tinfo->videoIdx, &tinfo->audioIdx,
                     &tinfo->videoRate, &tinfo->audioRate, &sps, &spslen, &pps, &ppslen);
 
-                send_frame(sendbuf, create_sprop_frame(sps, spslen, 0), streamclient.videofds[0], rtpseqno++);
-                send_frame(sendbuf, create_sprop_frame(pps, ppslen, 0), streamclient.videofds[0], rtpseqno++);
+                send_video_frame(sendbuf, create_sprop_frame(sps, spslen, 0), streamclient.videofds[0], rtpseqno++);
+                send_video_frame(sendbuf, create_sprop_frame(pps, ppslen, 0), streamclient.videofds[0], rtpseqno++);
 
                 CHECK((pthread_create(&threadid, NULL, fill_queue, tinfo)) == 0);
                 pthread_detach(threadid);
@@ -421,19 +421,20 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
                 /* Open up the needed ports and bind them locally */
                 write_remote_ip(tempstr, streamclient.rtspfd);
                 resolve_host(tempstr, rtspmsg.clirtpport, 0, SOCK_DGRAM, &info); 
-                streamclient.videofds[0] = client_socket(info, streamclient.server_rtp_port);
+                streamclient.videofds[0] = client_socket(info, streamclient.server_rtp_video_port);
                 resolve_host(tempstr, rtspmsg.clirtcpport, 0, SOCK_DGRAM, &info);
-                streamclient.videofds[1] = client_socket(info, streamclient.server_rtcp_port);
+                streamclient.videofds[1] = client_socket(info, streamclient.server_rtcp_video_port);
 
 
-                sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf);
+                sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf,
+                    streamclient.server_rtp_video_port, streamclient.server_rtcp_video_port);
                 send_all(i, sendbuf, sent);
-                streamclient.state = SETUPSENT;
+                streamclient.state = SETUPCOMPLETE;
 
               }
               break;
 
-            case SETUPSENT:
+            case SETUPCOMPLETE:
               if (rtspmsg.type == PLAY) {
                 sent = rtsp_play(&rtspmsg, sendbuf);
                 send_all(i, sendbuf, sent);
