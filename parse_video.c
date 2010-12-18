@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <glib.h>
 
+
+#include "fileio.h"
 #include "parse_video.h"
+#include "g711.h"
 
 /* Call this first
    Initializes AVFormatContext
@@ -42,7 +45,7 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
   *videoIdx = videoStream;
   *audioIdx = audioStream;
 
-  printf("Finished checking the streams...\n");
+  oma_debug_print("Finished checking the streams...\n");
   fflush(stdout);
 
   /* Check frame rate */
@@ -59,7 +62,7 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
     *audioRate = (double)cod->sample_rate;
   }
 
-  printf("Finished checking the framerate...\n");
+  oma_debug_print("Finished checking the framerate...\n");
   fflush(stdout);
 
   /* Create and decode the sprop-parameter-set */
@@ -69,7 +72,7 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
       (tempstr = strstr(tempbuf, "sprop-parameter-sets=")) == NULL ||
       (comma = strchr(tempstr, ',')) == NULL ||
       (end = strstr(comma, "\r\n")) == NULL) {
-    printf("Error creating the sdp!\n");
+    oma_debug_print("Error creating the sdp!\n");
     exit(1);
   }
 
@@ -79,22 +82,6 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
   *sps = g_base64_decode(tempstr + 21, spslen);
   *pps = g_base64_decode(comma + 1, ppslen);
   
-  /*
-  sprintf(newmsg.data, 
-      "v=0\r\n"
-      "o=atte\r\n"
-      "s=mpeg4video\r\n"
-      "t=0 0\r\n"
-      "a=recvonly\r\n"
-      "m=video 40404 RTP/AVP 96\r\n"
-      "a=rtpmap:96 H264/90000\r\n"
-      "a=control:trackID=65536\r\n"
-      "a=fmtp:96 profile-level-id=42C00D; packetization-mode=1; "
-      "sprop-parameter-sets=Z0LADZpzAoP2AiAAAAMAIAAAAwPR4oVN,aM48gA==\r\n"
-      "a=framesize:96 320-240\r\n"
-      );
-  */
-
   return (*ctx)->nb_streams;
 }
 
@@ -105,28 +92,99 @@ int get_frame(AVFormatContext *ctx, struct frame *myFrame, int videoIdx, int aud
 	      double videoRate, double audioRate) {
 
   AVPacket packet;
-  int ret;
+  AVCodec *deCodec, *enCodec;
+  AVCodecContext *cod, *enCod;
+  int ret, frame_size;
+  uint8_t *mediabuf;
+  uint8_t audiooutbuf[FF_MIN_BUFFER_SIZE];
+  int len;
+
+  /* Joku taikatemppu strait outta google, segfaulttaa muuten */
+  DECLARE_ALIGNED(16,uint8_t,audioinbuf)[(AVCODEC_MAX_AUDIO_FRAME_SIZE * 3) / 2];
+  int out_size = sizeof(audioinbuf); 
+
+
+  oma_debug_print("Entered get_frame\n");
 
   if (av_read_frame(ctx, &packet) >= 0) {
-    uint8_t *copy = malloc(packet.size*sizeof(uint8_t));
-    memcpy(copy, packet.data, packet.size);
 
-    myFrame->data = copy;
-    myFrame->size = packet.size;
-
+    /* Video frame */
     if (packet.stream_index == videoIdx) {
-      myFrame->timestamp = (int)round(packet.pts * 90000.0/videoRate) + 2;
+      mediabuf = (uint8_t *)malloc(packet.size*sizeof(uint8_t));
+      memcpy(mediabuf, packet.data, packet.size);
+
+      myFrame->data = mediabuf;
+      myFrame->size = packet.size;
+      myFrame->timestamp = (int)round(packet.pts * av_q2d(ctx->streams[videoIdx]->time_base) * 90000.0);
+      oma_debug_print("Video pts: %d\n", packet.pts);
     }
-    if (packet.stream_index == audioIdx) {
-      myFrame->timestamp = (int)round((packet.pts / 1024) * (90000.0/50.0)) + 2;
-      /*printf("Audio packet timestamp: %ld\n", packet.pts); */
+
+    /* Audio frame */
+    else if (packet.stream_index == audioIdx) {
+      oma_debug_print("Found audio frame...\n");
+
+      cod = ctx->streams[audioIdx]->codec;
+      deCodec = avcodec_find_decoder(cod->codec_id);
+      packet.data[packet.size] = 0;
+
+      oma_debug_print("Found decoder...\n");
+
+      if (!deCodec) {
+        fprintf(stderr, "Error while decoding audio: Codec not supported!\n");
+        return -1;
+      }
+
+      avcodec_open(cod, deCodec);
+
+      oma_debug_print("Opened codec for decoding...\n");
+
+      memset(audioinbuf, 0, AVCODEC_MAX_AUDIO_FRAME_SIZE);
+      len = avcodec_decode_audio3(cod, (int16_t *)audioinbuf, &out_size, &packet);
+      oma_debug_print("AAC frame decoded to %d samples, out_size=%d\n", len, out_size);
+
+      enCodec = avcodec_find_encoder(CODEC_ID_PCM_ALAW);
+      if (!enCodec) {
+        fprintf(stderr, "Error while encoding audio: Codec not supported!\n");
+        return -1;
+      }
+
+      enCod = avcodec_alloc_context();
+      enCod->bit_rate = cod->bit_rate;
+      enCod->sample_rate = cod->sample_rate;
+      enCod->channels = cod->channels;
+      enCod->sample_fmt = SAMPLE_FMT_S16;
+
+      if (avcodec_open(enCod, enCodec) < 0) {
+        fprintf(stderr, "Error while opening codec!\n");
+        return -1;
+      }
+
+      frame_size = enCod->frame_size;
+      oma_debug_print("Audio frame size: %d\n", frame_size);
+      if ((len = avcodec_encode_audio(enCod, audiooutbuf, len * 6, (int16_t *)audioinbuf)) <= 0) {
+        fprintf(stderr, "Error encoding audio: frame\n");
+      }
+      oma_debug_print("Bytes used after encoding to PCMA: %d, FF_MIN_BUFFER_SIZE=%d\n", len, FF_MIN_BUFFER_SIZE);
+
+      mediabuf = (uint8_t *)malloc(len * sizeof(uint8_t));
+      memcpy(mediabuf, audiooutbuf, len);
+
+      myFrame->data = mediabuf;
+      myFrame->size = len;
+      myFrame->timestamp = (int)round(packet.pts * av_q2d(ctx->streams[audioIdx]->time_base) * 90000.0);
+      oma_debug_print("Audio pts: %d\n", packet.pts);
+
+      avcodec_close(enCod);
+      av_free(enCod);
     }
 
     ret = packet.stream_index;
   }
   else {
+    oma_debug_print("Error reading frame!!\n");
     ret = -1;
   }
+
   av_free_packet(&packet);
   return ret;
 }

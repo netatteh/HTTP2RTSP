@@ -75,7 +75,7 @@ int rtsp_options(const RTSPMsg *msg, Client *client, unsigned char *buf);
 
 int rtsp_describe(Client *client, unsigned char *buf);
 
-int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf);
+int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf, int rtp, int rtcp);
 
 int rtsp_play(const RTSPMsg *msg, unsigned char *buf);
 

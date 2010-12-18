@@ -15,10 +15,11 @@
 /* File descriptor used for logging, global */
 int logfd;
 
+/* Debug flag */
+int debug;
 
 /* Signals come here */
 sig_atomic_t signo;
-
 
 
 
@@ -61,8 +62,11 @@ int main(int argc, char *argv[])
   char *logfilename = "debug.log";
   char httpsource[URLSIZE], rtspport[10];
 
+
   /* TODO: t is not yet used */
   int f = 0, t = 0, l = 0;
+
+  debug = 1;
 
   memset(httpsource, 0, URLSIZE);
   memset(rtspport, 0, 10);

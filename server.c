@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <search.h>
+#include <glib.h>
 
 #include "server.h"
 #include "httpmsg.h"
@@ -43,8 +44,11 @@ void init_client(Client *client)
   client->rtspfd = -1;
   client->session = 0;
   client->cseq = 0;
-  client->server_rtp_port = 50508;
-  client->server_rtcp_port = 50509;
+  client->setupsreceived = 0;
+  client->server_rtp_video_port = 50508;
+  client->server_rtcp_video_port = 50509;
+  client->server_rtp_audio_port = 50510;
+  client->server_rtcp_audio_port = 50511;
   client->videofds[0] = -1;
   client->videofds[1] = -1;
   client->audiofds[0] = -1;
@@ -57,7 +61,7 @@ void push_event(TimeoutEvent *event, Queue *queue)
   TimeoutEvent *stepper = queue->last;
   event->prev = event->next = NULL;
 
-  printf("Pushing to queue...\n");
+  oma_debug_print("Pushing to queue...\n");
   fflush(stdout);
 
   if (stepper == NULL) {
@@ -88,7 +92,7 @@ TimeoutEvent *pull_event(Queue *queue)
 {
   TimeoutEvent *ret = queue->first;
 
-  printf("Pulling from queue...\n");
+  oma_debug_print("Pulling from queue...\n");
   fflush(stdout);
 
   if (ret != NULL) {
@@ -100,9 +104,9 @@ TimeoutEvent *pull_event(Queue *queue)
     }
   }
   else {
-    printf("The queue was empty");
+    oma_debug_print("The queue was empty");
   }
-  printf("Time - secs: %ld, usecs: %ld\n", ret->time.tv_sec, ret->time.tv_usec);
+  oma_debug_print("Time - secs: %ld, usecs: %ld\n", ret->time.tv_sec, ret->time.tv_usec);
 
   return ret;
 }
@@ -130,7 +134,7 @@ void push_timeout(Queue *queue, int time_ms, int type)
 void set_timeval(TimeoutEvent *event, struct timeval base)
 {
   char *type = (event->frame->frametype == VIDEO_FRAME)?"Video":"Audio";
-  printf("%s timestamp: %d\n", type, event->frame->timestamp);
+  oma_debug_print("%s timestamp: %d\n", type, event->frame->timestamp);
 
   event->time.tv_sec = base.tv_sec + (event->frame->timestamp / 90000);
   event->time.tv_usec = base.tv_usec + ((event->frame->timestamp % 90000) / 0.09);
@@ -202,7 +206,7 @@ void *fill_queue(void *thread_params)
       timeset = 1;
     }
 
-    printf("Starting to fill the queue...\n");
+    oma_debug_print("Starting to fill the queue...\n");
     while (queue.size < QUEUESIZE && !quitflag) {
 
       if (!mutlocked) {
@@ -211,10 +215,11 @@ void *fill_queue(void *thread_params)
 
       frame = (Frame *)malloc(sizeof(Frame));
 
+      oma_debug_print("fill_queue: calling get_frame\n");
       /* Get the frame. If none are available, end the loop and the entire function. */
       if ((frametype = get_frame(tinfo->ctx, frame, tinfo->videoIdx, 
               tinfo->audioIdx, tinfo->videoRate, tinfo->audioRate)) == -1) {
-        printf("EOF from the media file!\n");
+        oma_debug_print("EOF from the media file!\n");
         quitflag = 1;
       }
       else {
@@ -230,12 +235,12 @@ void *fill_queue(void *thread_params)
 
       unlock_mutex(&queuelock);
       mutlocked = 0;
-      usleep(10000);
+      usleep(1000);
 
 
     } /* End of inner while loop */
 
-    printf("The queue is full\n");
+    oma_debug_print("The queue is full\n");
 
   } /* End of outer while loop */
   
@@ -265,7 +270,9 @@ int start_server(const char *url, const char *rtspport)
   pthread_t threadid;
   ThreadInfo *tinfo = NULL;
 
-  uint16_t rtpseqno = (rand() % 1000000);
+  uint16_t rtpseqno_video = (rand() % 1000000);
+  uint16_t rtpseqno_audio = (rand() % 1000000);
+
   TimeoutEvent *event;
 
   /* The current state of the protocol */
@@ -309,9 +316,15 @@ int start_server(const char *url, const char *rtspport)
         switch (event->type) {
 
           case FRAME:
-          /* TODO: For now only video frames are sent */
-          if (event->frame->frametype == VIDEO_FRAME) {
-            rtpseqno += send_frame(sendbuf, event->frame, streamclient.videofds[0], rtpseqno);
+
+            /* Video frame */
+            if (event->frame->frametype == VIDEO_FRAME) {
+              rtpseqno_video += send_video_frame(sendbuf, event->frame, streamclient.videofds[0], rtpseqno_video);
+            }
+
+            /* Audio frame */
+            else {
+            rtpseqno_audio += send_audio_frame(sendbuf, event->frame, streamclient.audiofds[0], rtpseqno_audio);
           }
 
           free(event->frame->data);
@@ -319,15 +332,15 @@ int start_server(const char *url, const char *rtspport)
           break;
 
           case CHECKMEDIASTATE:
-            printf("Timeout handling checking media state...\n");
+            oma_debug_print("Timeout handling checking media state...\n");
             if (mediastate != STREAM) {
-              send_dummy_rtp(sendbuf, streamclient.videofds[0], &rtpseqno);
+              send_dummy_rtp(sendbuf, streamclient.videofds[0], &rtpseqno_video);
               push_timeout(&queue, 1000, CHECKMEDIASTATE);
             }
           break;
 
           default:
-            printf("ERRORENOUS EVENT TYPE!\n");
+            oma_debug_print("ERRORENOUS EVENT TYPE!\n");
           break;
         }
 
@@ -335,13 +348,16 @@ int start_server(const char *url, const char *rtspport)
         if (queue.size > 0) {
           *timeout = calculate_delta(&event->time, &queue.first->time);
           timeind = timeout;
-          printf("Timeout: %ld secs, %ld usecs\n", timeout->tv_sec, timeout->tv_usec);
+          oma_debug_print("Timeout: %ld secs, %ld usecs\n", timeout->tv_sec, timeout->tv_usec);
         }
         else {
-          printf("The first entry of the queue is NULL!\n");
+          oma_debug_print("The first entry of the queue is NULL!\n");
         }
 
-        if (queue.size < QUEUESIZE / 2) pthread_cond_signal(&queuecond);
+        if (queue.size < QUEUESIZE / 2) {
+          oma_debug_print("Signaling thread to start filling the queue");
+          pthread_cond_signal(&queuecond);
+        }
 
         free(event);
       }
@@ -358,7 +374,7 @@ int start_server(const char *url, const char *rtspport)
 
         /* New connection from a client */
         if (i == listenfd) {
-          printf("Recieved a new connection to listenfd\n");
+          oma_debug_print("Recieved a new connection to listenfd\n");
           if ((tempfd = accept(i, (struct sockaddr *)&remoteaddr, &addrlen)) == -1) {
             if (errno != EWOULDBLOCK && errno != ECONNABORTED &&
                 errno != EPROTO && errno != EINTR) {
@@ -396,15 +412,15 @@ int start_server(const char *url, const char *rtspport)
               if ((recvd = recv_all(i, msgbuf, BUFSIZE, 0)) == 0) {
                 FD_CLR(i, &masterfds);
                 close(i);
-                printf("Socket closed\n");
+                oma_debug_print("Socket closed\n");
               }
-              printf("Received data from video source!\n");
+              oma_debug_print("Received data from video source!\n");
 
               writestr(videofd, msgbuf, recvd);
               videoleft -= recvd;
 
               if (videoleft <= 0) {
-                printf("Video download complete!\n");
+                oma_debug_print("Video download complete!\n");
                 FD_CLR(mediafd, &masterfds);
                 close(videofd);
                 close(mediafd);
@@ -414,23 +430,24 @@ int start_server(const char *url, const char *rtspport)
                 initialize_context(&tinfo->ctx, "videotemp.mp4", &tinfo->videoIdx, &tinfo->audioIdx,
                     &tinfo->videoRate, &tinfo->audioRate, &sps, &spslen, &pps, &ppslen);
 
-                send_frame(sendbuf, create_sprop_frame(sps, spslen, 0), streamclient.videofds[0], rtpseqno++);
-                send_frame(sendbuf, create_sprop_frame(pps, ppslen, 0), streamclient.videofds[0], rtpseqno++);
-
+                /* Launch the queue filler thread */
                 CHECK((pthread_create(&threadid, NULL, fill_queue, tinfo)) == 0);
                 pthread_detach(threadid);
+
+                /* Send the sprop-parameters before any other frames */
+                send_video_frame(sendbuf, create_sprop_frame(sps, spslen, 0),
+                    streamclient.videofds[0], rtpseqno_video++);
+                send_video_frame(sendbuf, create_sprop_frame(pps, ppslen, 0),
+                    streamclient.videofds[0], rtpseqno_video++);
+
+                g_free(sps);
+                g_free(pps);
+
 
                 lock_mutex(&queuelock);
                 push_timeout(&queue, 1000, CHECKMEDIASTATE);
                 unlock_mutex(&queuelock);
 
-                
-                /* Send the SPS and PPS in-band
-                sent = build_parameter_set(sps, spslen, sendbuf);
-                send_all(streamclient.videofds[0], sendbuf, sent);
-                sent = build_parameter_set(pps, ppslen, sendbuf);
-                send_all(streamclient.videofds[0], sendbuf, sent);
-                */
 
                 mediastate = STREAM;
               }
@@ -454,16 +471,16 @@ int start_server(const char *url, const char *rtspport)
         /* Data from a client ( i == streamclient.rtspfd) */
         else {
 
-          printf("Received data from rtspfd\n");
+          oma_debug_print("Received data from rtspfd\n");
 
           if ((recvd = recv_all(i, msgbuf, BUFSIZE, 0)) == 0) {
             FD_CLR(i, &masterfds);
             close(i);
-            printf("Socket closed\n");
+            oma_debug_print("Socket closed\n");
             streamclient.state = NOCLIENT;
           }
           else {
-            printf("%s", msgbuf);
+            oma_debug_print("%s", msgbuf);
             parse_rtsp(&rtspmsg, msgbuf); 
           }
 
@@ -498,23 +515,46 @@ int start_server(const char *url, const char *rtspport)
 
             case SDPSENT:
               if (rtspmsg.type == SETUP) {
-                /* Open up the needed ports and bind them locally */
+                streamclient.setupsreceived++;
+
+                /* Open up the needed ports and bind them locally. The RTCP ports opened here
+                 * are not really used by this application. */
                 write_remote_ip(tempstr, streamclient.rtspfd);
-                resolve_host(tempstr, rtspmsg.clirtpport, 0, SOCK_DGRAM, &info); 
-                streamclient.videofds[0] = client_socket(info, streamclient.server_rtp_port);
-                resolve_host(tempstr, rtspmsg.clirtcpport, 0, SOCK_DGRAM, &info);
-                streamclient.videofds[1] = client_socket(info, streamclient.server_rtcp_port);
+                oma_debug_print("Remote IP: %s\n", tempstr);
 
+                if (streamclient.setupsreceived < 2) {
+                  resolve_host(tempstr, rtspmsg.clirtpport, SOCK_DGRAM, 0, &info); 
+                  streamclient.audiofds[0] = client_socket(info, streamclient.server_rtp_audio_port);
+                  resolve_host(tempstr, rtspmsg.clirtcpport, SOCK_DGRAM, 0, &info);
+                  streamclient.audiofds[1] = client_socket(info, streamclient.server_rtcp_audio_port);
 
-                sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf);
+                  sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf,
+                      streamclient.server_rtp_audio_port, streamclient.server_rtcp_audio_port);
+
+                }
+                else {
+                  resolve_host(tempstr, rtspmsg.clirtpport, SOCK_DGRAM, 0, &info); 
+                  streamclient.videofds[0] = client_socket(info, streamclient.server_rtp_video_port);
+                  resolve_host(tempstr, rtspmsg.clirtcpport, SOCK_DGRAM, 0, &info);
+                  streamclient.audiofds[1] = client_socket(info, streamclient.server_rtcp_video_port);
+
+                  sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf,
+                      streamclient.server_rtp_video_port, streamclient.server_rtcp_video_port);
+
+                streamclient.state = SETUPCOMPLETE;
+                }
+
+                oma_debug_print("Sending setup response...\n");
                 send_all(i, sendbuf, sent);
-                streamclient.state = SETUPSENT;
 
               }
               break;
 
-            case SETUPSENT:
+            case SETUPCOMPLETE:
               if (rtspmsg.type == PLAY) {
+
+                /* Respond to the PLAY request, and start sending dummy RTP packets
+                 * to disable the client timeout */
                 sent = rtsp_play(&rtspmsg, sendbuf);
                 send_all(i, sendbuf, sent);
                 lock_mutex(&queuelock);
@@ -538,7 +578,7 @@ int start_server(const char *url, const char *rtspport)
     if (queue.size > 0) {
       CHECK((gettimeofday(&timenow, NULL)) == 0);
       *timeout = calculate_delta(&timenow, &queue.first->time);
-      printf("Delta sec: %ld, Delta usec: %ld\n", timeout->tv_sec, timeout->tv_usec);
+      oma_debug_print("Delta sec: %ld, Delta usec: %ld\n", timeout->tv_sec, timeout->tv_usec);
 
       if (timeout->tv_sec < 0) {
         timeout->tv_sec = 0;

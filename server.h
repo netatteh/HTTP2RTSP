@@ -20,7 +20,7 @@ enum clientstates
   NOCLIENT,
   CLICONNECTED,
   SDPSENT,
-  SETUPSENT,
+  SETUPCOMPLETE,
   STREAMING
 };
 
@@ -37,8 +37,11 @@ typedef struct client
   int rtspfd;
   int session;
   int cseq;
-  int server_rtp_port;
-  int server_rtcp_port;
+  int server_rtp_audio_port;
+  int server_rtp_video_port;
+  int server_rtcp_audio_port;
+  int server_rtcp_video_port;
+  int setupsreceived;
   int videofds[2];
   int audiofds[2];
 } Client;

@@ -11,7 +11,10 @@
 #include "fileio.h"
 #include "util.h"
 
+int debug;
+
 pthread_mutex_t filemut = PTHREAD_MUTEX_INITIALIZER;
+
 
 
 /* Inspiration from UAP lecture slides */
@@ -45,6 +48,19 @@ int writestr(int fd, const void *str, size_t length)
     return length;
 } 
 
+
+
+
+void oma_debug_print(char *format, ...)
+{
+  va_list ap;
+
+  if (debug) {
+    va_start(ap, format);
+    vprintf(format, ap);
+    va_end(ap); 
+  }
+}
 
 void write_log(int fd, char *format, ...)
 {

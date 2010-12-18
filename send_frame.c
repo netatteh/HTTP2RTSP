@@ -23,7 +23,7 @@ void pack32i(unsigned char *buf, uint32_t src)
 }
 
 
-int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t seqnum) {
+int send_video_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t seqnum) {
   const unsigned char firstbyte = FIRSTBYTE;
   unsigned char secondbyte;
 
@@ -51,12 +51,12 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
     /* Last packet */
     if (remains <= spaceForData) {
       buflen = remains + 12;
-      secondbyte = MARKEDSECONDBYTE;
+      secondbyte = MARKEDSECONDBYTE_H264;
     }
     /* "Full packet" */
     else {
       buflen = spaceForData + 12;
-      secondbyte = UNMARKEDSECONDBYTE;
+      secondbyte = UNMARKEDSECONDBYTE_H264;
     }
 
     memcpy(bufstep, &firstbyte, 1);
@@ -116,10 +116,30 @@ int send_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint16_t s
 }
 
 
+int send_audio_frame(unsigned char *buf, struct frame *myframe, int sockfd, uint16_t seqnum)
+{
+  unsigned char firstbyte = FIRSTBYTE;
+  unsigned char secondbyte = SECONDBYTE_PCMA;
+
+  memset(buf, 0, BUFSIZE);
+
+  memcpy(buf, &firstbyte, 1);
+  memcpy(buf + 1, &secondbyte, 1);
+  packi16(buf + 2, seqnum++);
+  pack32i(buf + 4, myframe->timestamp);
+  pack32i(buf + 8, ssrc);
+
+  memcpy(buf + 12, myframe->data, myframe->size);
+  send_all(sockfd, buf, myframe->size + 12);
+
+  return 1;
+}
+
+
 void send_dummy_rtp(unsigned char *sendbuf, int sockfd, uint16_t *seqnum)
 {
   unsigned char firstbyte = FIRSTBYTE;
-  unsigned char secondbyte = UNMARKEDSECONDBYTE;
+  unsigned char secondbyte = UNMARKEDSECONDBYTE_H264;
 
   memset(sendbuf, 0, BUFSIZE);
   memcpy(sendbuf, &firstbyte, 1);

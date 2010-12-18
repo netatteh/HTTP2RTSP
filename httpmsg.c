@@ -201,7 +201,6 @@ int rtsp_options(const RTSPMsg *msg, Client *client, unsigned char *buf)
 } 
 
 
-/* TODO: The date format is probably wrong, lets see if it works anyway */
 int rtsp_describe(Client *client, unsigned char *buf)
 {
   char timebuf[50];
@@ -225,6 +224,7 @@ int rtsp_describe(Client *client, unsigned char *buf)
       "s=mpeg4video\r\n"
       "t=0 0\r\n"
       "a=recvonly\r\n"
+      "m=audio 40408 RTP/AVP 8\r\n"
       "m=video 40404 RTP/AVP 96\r\n"
       "a=rtpmap:96 H264/90000\r\n"
       "a=fmtp:96 packetization-mode=1\r\n" 
@@ -236,13 +236,12 @@ int rtsp_describe(Client *client, unsigned char *buf)
 }
 
 
-int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf)
+int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf, int rtp, int rtcp)
 {
   RTSPMsg newmsg = *msg;
   newmsg.session = client->session = (rand() % 1000000);
   newmsg.fields |= F_SESSION;
-  sprintf(newmsg.transport + strlen(newmsg.transport), ";server_port=%d-%d",
-      client->server_rtp_port, client->server_rtcp_port);
+  sprintf(newmsg.transport + strlen(newmsg.transport), ";server_port=%d-%d", rtp, rtcp);
   
   return write_rtsp(&newmsg, buf);
 }

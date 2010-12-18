@@ -16,7 +16,7 @@ http2rtsp: main.o fileio.o socketfunc.o util.o httpmsg.o server.o parse_video.o 
 
 tester: tester.o httpmsg.o
 
-parsetest: parse_video.o parse_example.o
+parsetest: fileio.o parse_video.o parse_example.o
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 	
 timeouttest: timeouttest.o util.o fileio.o

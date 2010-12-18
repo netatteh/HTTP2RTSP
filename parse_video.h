@@ -34,3 +34,4 @@ int get_frame(AVFormatContext *ctx, Frame *myFrame, int videoIdx, int audioIdx,
 void close_context(AVFormatContext *ctx);
 
 #endif
+
