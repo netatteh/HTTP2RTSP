@@ -11,6 +11,7 @@
 #include "fileio.h"
 #include "util.h"
 #include "httpmsg.h"
+#include "mt_server.h"
 
 /* File descriptor used for logging, global */
 int logfd;
@@ -33,8 +34,9 @@ void sig_handler(int signum)
 void usage(const char *progname)
 {
   printf(
-      "Usage: %s -f <http address of source> -t <media type> -l <rtsp listening ports>\n",
+      "Usage: %s -f <http address of source> -t <media type> -l <rtsp listening ports> -s <sip listening port>\n",
       progname);
+  printf("If parameter -s is given, the Movie theatre scenario (Assignment 2) is started.\n");
   exit(EXIT_SUCCESS);
 }
 
@@ -60,11 +62,11 @@ int main(int argc, char *argv[])
   extern int optind;
   int c;
   char *logfilename = "debug.log";
-  char httpsource[URLSIZE], rtspport[10];
+  char httpsource[URLSIZE], rtspport[10], sipport[10];
 
 
   /* TODO: t is not yet used */
-  int f = 0, t = 0, l = 0;
+  int f = 0, t = 0, l = 0, s = 0;
 
   debug = 1;
 
@@ -72,7 +74,7 @@ int main(int argc, char *argv[])
   memset(rtspport, 0, 10);
 
   /* Process the command line arguments */
-  while ((c = getopt(argc, argv, "f:t:l:")) != -1) {
+  while ((c = getopt(argc, argv, "f:t:l:s:")) != -1) {
     switch (c) {
       case 'f':
         strncpy(httpsource, optarg, URLSIZE - 1);
@@ -85,6 +87,10 @@ int main(int argc, char *argv[])
         strncpy(rtspport, optarg, 9);
         l = 1;
         break;
+    case 's':
+      strncpy(sipport, optarg, 9);
+      s = 1;
+      break;
       default:
         usage(argv[0]);
     }
@@ -111,8 +117,17 @@ int main(int argc, char *argv[])
    * Timestamps are added to the log automatically. */
   write_log(logfd, "Magee logi %d %d %s\n", 3, 4, "Heppa");
 
-  start_server(httpsource, rtspport);
-  close(logfd);  
+
+
+  /* If -s is given, starts Movie Theatre (assignment 2)*/
+  if (s) {
+    start_mt_server(httpsource, rtspport, sipport);
+  }
+  /* Otherwise, start HTTP2RTSP (assignment 1) */
+  else {
+    start_server(httpsource, rtspport);
+  }
+  close(logfd);
   
 
   return 1;

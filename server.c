@@ -37,7 +37,6 @@ pthread_cond_t queuecond = PTHREAD_COND_INITIALIZER;
 /* The queue used in sending packets */
 Queue queue;
 
-
 void init_client(Client *client)
 {
   client->state = NOCLIENT;
@@ -54,7 +53,6 @@ void init_client(Client *client)
   client->audiofds[0] = -1;
   client->audiofds[1] = -1;
 }
-
 
 void push_event(TimeoutEvent *event, Queue *queue)
 {
@@ -297,7 +295,6 @@ int start_server(const char *url, const char *rtspport)
   FD_ZERO(&readfds);
   FD_ZERO(&masterfds);
   FD_SET(listenfd, &masterfds);
-
 
   while (!quit) {
 

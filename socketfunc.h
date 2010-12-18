@@ -52,5 +52,18 @@ int send_all(int sockfd, unsigned char *buf, int size);
 /* Wrapper for recv */
 int recv_all(int sockfd, unsigned char *buf, size_t len, int flags);
 
+/* Wrapper for recvfrom */
+int Recvfrom(int sockfd, unsigned char *buffer, int buflen, int flags,
+             struct sockaddr *addr, socklen_t *addrsize);
+
+int Sendto_all(int sock, unsigned char *buf, int buflen, int flags,
+               struct sockaddr *dest, socklen_t addrlen);
+
+/* Creates a "server" UDP socket */
+int udp_server(const char *host, const char *serv, socklen_t *addrlenp);
+
+/* Creates a connected UDP socket */
+int udp_connected(const struct sockaddr *cliaddr, socklen_t clilen);
+
 #endif
 
