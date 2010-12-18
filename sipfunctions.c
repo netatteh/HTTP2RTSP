@@ -143,7 +143,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
   sprintf(temp, "CSeq: %s\r\n", msg->cseq);
   temp += strlen(temp);
 
-  sprintf(temp, "Contact: <sip:localhost:%s>\r\n", sipport);
+  sprintf(temp, "Contact: %s>\r\n", msg->from);
   temp += strlen(temp);
 
   sprintf(temp, "Max-Forwards: 70\r\n");

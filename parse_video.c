@@ -4,7 +4,6 @@
 
 #include "fileio.h"
 #include "parse_video.h"
-#include "g711.h"
 
 /* Call this first
    Initializes AVFormatContext
