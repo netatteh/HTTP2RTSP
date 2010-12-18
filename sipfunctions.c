@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 /* Parses an incoming SIP message from buf and fills the contents                                                                                                    
-   to a SIPMsg strucure  */
+   to a SIPMsg strucure. Handles INVITE, ACK, BYE */
 int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
   char *temp = (char *)buffer;
   char *end = strstr((char *)buffer, "\r\n\r\n");
@@ -76,6 +76,20 @@ int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
   return 0;
 }
 
+void create_bye(SIPMsg *bye, SIPClient *client) {
+  bzero(bye, sizeof(bye));
+
+  bye->type = BYE;
+  strcpy(bye->from, client->to);
+  strcpy(bye->to, client->from);
+  strcpy(bye->callid, client->callid);
+  strcpy(bye->cseq, "20 BYE");
+  bye->contentlen = 0;
+
+  sprintf(bye->via, "SIP/2.0/UDP %s;rport;branch=z9hG4bK12345", client->from);
+
+}
+
 /* Creates an appropriate OK for given INVITE */
 int create_ok(const SIPMsg *msg, SIPMsg *ok) {
   memset(ok, 0, sizeof(SIPMsg));
@@ -120,7 +134,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
     sprintf(temp, "SIP/2.0 200 OK\r\n");
   }
   else if (msg->type  == BYE) {
-    sprintf(temp, "BYE sip:kaisa@localhost SIP/2.0");
+    sprintf(temp, "BYE sip:kaisa@localhost SIP/2.0\r\n");
   }
   else {
     printf("write_sip: unsupported msg type\n");
@@ -143,7 +157,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
   sprintf(temp, "CSeq: %s\r\n", msg->cseq);
   temp += strlen(temp);
 
-  sprintf(temp, "Contact: %s>\r\n", msg->from);
+  sprintf(temp, "Contact: %s\r\n", msg->to);
   temp += strlen(temp);
 
   sprintf(temp, "Max-Forwards: 70\r\n");

@@ -6,6 +6,8 @@
 #define PORTLEN 10
 #define BUFLEN 5000
 
+#include <netinet/in.h>
+
 enum sipmsgtypes {
   INVITE,
   SIPOK,
@@ -44,11 +46,17 @@ typedef struct cli_info {
   char callid[FIELDLEN];
   int sockfd;
   int ackrecvd;
+  char from[FIELDLEN];
+  char to[FIELDLEN];
+  struct sockaddr cliaddr;
 } SIPClient;
 
 /* Parses an incoming SIP message from buf and fills the contents
    to a SIPMsg strucure  */
 int parsesipmsg(SIPMsg *msg, const unsigned char *buf);
+
+/* Creates a BYE message based on client info */
+void create_bye(SIPMsg *bye, SIPClient *client);
 
 /* Creates an appropriate OK for given INVITE or BYE */
 int create_ok(const SIPMsg *msg, SIPMsg *ok);

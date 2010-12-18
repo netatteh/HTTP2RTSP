@@ -160,7 +160,7 @@ int get_frame(AVFormatContext *ctx, struct frame *myFrame, int videoIdx, int aud
 
       frame_size = enCod->frame_size;
       oma_debug_print("Audio frame size: %d\n", frame_size);
-      if ((len = avcodec_encode_audio(enCod, audiooutbuf, len * 6, (int16_t *)audioinbuf)) <= 0) {
+      if ((len = avcodec_encode_audio(enCod, audiooutbuf, len * 2, (int16_t *)audioinbuf)) <= 0) {
         fprintf(stderr, "Error encoding audio: frame\n");
       }
       oma_debug_print("Bytes used after encoding to PCMA: %d, FF_MIN_BUFFER_SIZE=%d\n", len, FF_MIN_BUFFER_SIZE);
