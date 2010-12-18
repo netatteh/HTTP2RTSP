@@ -92,7 +92,7 @@ int timecmp(struct timeval first, struct timeval second);
 
 
 /* Calculates the difference between two time instants, (second - first) */
-struct timeval caclulate_delta(struct timeval *first, struct timeval *second);
+struct timeval calculate_delta(struct timeval *first, struct timeval *second);
 
 Frame *create_sprop_frame(unsigned char *sps, size_t spslen, uint32_t ts);
 

@@ -95,8 +95,9 @@ int create_ok(const SIPMsg *msg, SIPMsg *ok) {
 	    "s=SIP server\r\n"
 	    "c=IN IP4 127.0.0.1\r\n"
 	    "t=0 0\r\n"
-	    "m=audio 22334 RTP/AVP 8\r\n"
+	    "m=audio 0 RTP/AVP 8\r\n"
 	    "a=rtpmap:8 PCMA/8000/1\r\n");
+
     ok->contentlen = strlen(ok->contents);
     ok->fields |= (SIP_CONTENTS | SIP_CONTENTTYPE);
   }
@@ -111,7 +112,7 @@ int create_ok(const SIPMsg *msg, SIPMsg *ok) {
 
 /* Writes out the contents of the given SIPMsg to buffer */
 /* Handles only 200 OK and BYE */
-int write_sip(const SIPMsg *msg, unsigned char *buf) {
+int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
   char *temp = (char *)buf;
   memset(temp, 0, BUFLEN);
 
@@ -142,7 +143,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf) {
   sprintf(temp, "CSeq: %s\r\n", msg->cseq);
   temp += strlen(temp);
 
-  sprintf(temp, "Contact: <sip:localhost:9876>\r\n");
+  sprintf(temp, "Contact: <sip:localhost:%s>\r\n", sipport);
   temp += strlen(temp);
 
   sprintf(temp, "Max-Forwards: 70\r\n");

@@ -43,6 +43,7 @@ typedef struct sipmsg {
 typedef struct cli_info {
   char callid[FIELDLEN];
   int sockfd;
+  int ackrecvd;
 } SIPClient;
 
 /* Parses an incoming SIP message from buf and fills the contents
@@ -53,6 +54,6 @@ int parsesipmsg(SIPMsg *msg, const unsigned char *buf);
 int create_ok(const SIPMsg *msg, SIPMsg *ok);
 
 /* Writes out the contents of the given SIPMsg to buffer */
-int write_sip(const SIPMsg *msg, unsigned char *buf);
+int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport);
 
 #endif

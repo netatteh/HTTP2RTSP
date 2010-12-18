@@ -30,7 +30,6 @@ extern pthread_mutex_t queuelock;
 extern pthread_cond_t queuecond;
 extern Queue queue;
 
-
 int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 {
   int mediafd = -1, listenfd, tempfd, maxfd;
@@ -62,25 +61,18 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
   /* For SIP */
   int siplistenfd, rtpfd, nclients=0, k;
-  SIPMsg *sipmsg, *ok;
+  SIPMsg sipmsg, ok;
   SIPClient *client;
   SIPClient *clientlist[MAXCLIENTS];
-  struct sockaddr cliaddr;
-  socklen_t clilen;
+  struct sockaddr cliaddr, rtpaddr;
+  socklen_t clilen, rtpaddrlen;
   unsigned char sip_inbuf[BUFSIZE];
   unsigned char sip_outbuf[BUFSIZE];
-
-  sipmsg = (SIPMsg*)malloc(sizeof(SIPMsg));
-  ok = (SIPMsg *)malloc(sizeof(SIPMsg));
 
   /* Initialize SIP client list */
   for (k=0; k<MAXCLIENTS; k++) {
     clientlist[k] = NULL;
   }
-
-  /* Initialize SIP cliaddr */
-  clilen = sizeof(&cliaddr);
-  bzero(&cliaddr, clilen);
 
   /* Create UDP socket and bind to given port */
   siplistenfd = udp_server(NULL, sipport, &clilen);
@@ -110,9 +102,9 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
     if ((nready = Select(maxfd + 1, &readfds, timeind)) == -1) {
       write_log(logfd, "Select interrupted by a signal\n");
     } 
-
     /* Timeout handling, used for packet pacing and other timeouts */
     else if (nready == 0) {
+
       timeind = NULL;
       lock_mutex(&queuelock);
       if ((event = pull_event(&queue)) != NULL) {
@@ -124,7 +116,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
           if (event->frame->frametype == VIDEO_FRAME) {
             rtpseqno += send_frame(sendbuf, event->frame, streamclient.videofds[0], rtpseqno);
           }
-	  /* It's an audio file */
+	  /* It's an audio frame */
 	  else {
 	    /* TODO: Transcode frame */
 
@@ -132,7 +124,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    /* TODO: is sipmasterfds needed??? */
 	    for (k=0; k<MAXCLIENTS; k++) {
 	      if (clientlist[k] != NULL) {
-		/*  Send frame */
+		/*  Send frame if Select says the socket is ready for sending*/
 	      }
 	    }
 
@@ -176,6 +168,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
     /* Start to loop through the file descriptors */
     for (i = 0; i <= maxfd; i++) {
+
       if (FD_ISSET(i, &readfds)) {
 
         nready--;
@@ -202,34 +195,44 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
 	/* New SIP client */
 	else if (i == siplistenfd) {
+
 	  bzero(sip_inbuf, BUFLEN);
+	  bzero(&cliaddr, clilen);
 	  Recvfrom(siplistenfd, sip_inbuf, BUFSIZE, 0, &cliaddr, &clilen);
 
-	  bzero(sipmsg, sizeof(sipmsg));
-	  parsesipmsg(sipmsg, sip_inbuf);
+	  bzero(&sipmsg, sizeof(&sipmsg));
+	  parsesipmsg(&sipmsg, sip_inbuf);
 
 	  /* Received INVITE */
-	  if (sipmsg->type == INVITE) {
+	  if (sipmsg.type == INVITE) {
 	    printf("SIP INVITE received\n");
 
 	    if (nclients < MAXCLIENTS) {
-	      bzero(ok, sizeof(ok));
+	      bzero(&ok, sizeof(&ok));
 	      bzero(sip_outbuf, sizeof(sip_outbuf));
-
-	      create_ok(sipmsg, ok);
-	      write_sip(ok, sip_outbuf);
+	      
+	      create_ok(&sipmsg, &ok);
+	      write_sip(&ok, sip_outbuf, sipport);
 	      Sendto_all(siplistenfd, sip_outbuf, BUFSIZE, 0, &cliaddr, clilen);
 
 	      printf("SIP 200 OK sent\n");
 
-	      /* Create sock for RTP */
-	      /* rtpfd = udp_connected(clihostname, sipmsg->clirtpport, &clilen); */
-	      rtpfd = nclients + 3;
+	      rtpaddr = cliaddr;
+
+	      /* Create connected UDP socket to client's rtp port */
+	      if (rtpaddr.sa_family == AF_INET) {
+		((struct sockaddr_in*)&rtpaddr)->sin_port = htons(atoi(sipmsg.clirtpport));
+	      }
+	      else if (rtpaddr.sa_family == AF_INET6) {
+		((struct sockaddr_in6*)&rtpaddr)->sin6_port = htons(atoi(sipmsg.clirtpport));
+	      }
+	      rtpfd = udp_connected(&rtpaddr, clilen);
 
 	      /* Create new client */
 	      client = malloc(sizeof(SIPClient));
-	      strcpy((char*)client->callid, (char*)sipmsg->callid);
+	      strcpy((char*)client->callid, (char*)sipmsg.callid);
 	      client->sockfd = rtpfd;
+	      client->ackrecvd = 0;
 
 	      /* Save client info to first free position in clientlist */
 	      for (k=0; k<MAXCLIENTS; k++) {
@@ -245,35 +248,31 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      printf("SIP MAXCLIENTS reached! Cannot accept new SIP clients\n");
 	    }
 	  }
-	  else if (sipmsg->type == ACK) {
+	  else if (sipmsg.type == ACK) {
 	    printf("SIP ACK received\n");
 
 	    /* Add client to writefds  */
 	    for (k=0; k<MAXCLIENTS; k++) {
-	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg->callid)==0) ) {
-		/* FD_SET(clientlist[k]->sockfd, &sipmasterfds); */
-		printf("clientrtpfd added to write set\n");
+	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg.callid)==0) ) {
+		clientlist[k]->ackrecvd = 1;
 		break;
 	      }
 	    }
 	  }
-	  else if (sipmsg->type == BYE) {
+	  else if (sipmsg.type == BYE) {
 	    printf("SIP BYE received\n");
-
+	    
 	    /* Send OK message */
-	    create_ok(sipmsg, ok);
-	    write_sip(ok, sip_outbuf);
+	    create_ok(&sipmsg, &ok);
+	    write_sip(&ok, sip_outbuf, sipport);
 	    Sendto_all(listenfd, sip_outbuf, BUFLEN, 0, &cliaddr, clilen);
 	    printf("SIP 200 OK sent\n");
 
 	    /* Find and remove client info */
 	    for (k=0; k<MAXCLIENTS; k++) {
-	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg->callid)==0) ) {
-		/* Remove client sockfd from writefds */
-		/* FD_CLR(clientlist[k]->sockfd, &sipmasterfds); */
-		/* close(clientlist[k]->sockfd); */
-
+	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg.callid)==0) ) {
 		/* Remove client info */
+		close(clientlist[k]->sockfd);
 		free(clientlist[k]);
 		clientlist[k] = NULL;
 
@@ -287,7 +286,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    printf("SIPServer received unsupported msg type\n");
 	    return -1;
 	  }
-	}
+	} /* Finished handling SIP msg */
 
         /* Data from the media source */
         else if (i == mediafd) {

@@ -261,7 +261,108 @@ int recv_all(int sockfd, unsigned char *buf, size_t len, int flags)
   return recvd;
 }
 
+int Sendto_all(int sock, unsigned char *buf, int buflen, int flags,
+               struct sockaddr *dest, socklen_t addrlen) {
+  int sent = 0;
+  int left = buflen;
+  int temp;
 
+  while (sent < buflen) {
+    if ( (temp=sendto(sock, buf+sent, left, flags,
+		      dest, addrlen)) == -1) {
+      perror("Send_all, send");
+      exit(1);
+    }
+    sent += temp;
+    left -= temp;
+  }
+  return sent;
+}
+
+
+
+int Recvfrom(int sockfd, unsigned char *buffer, int buflen, int flags,
+             struct sockaddr *addr, socklen_t *addrsize) {
+  int bytes;
+  if ( (bytes=recvfrom(sockfd, buffer, buflen, flags,
+		       addr, addrsize)) == -1) {
+    perror("recvfrom");
+    exit(1);
+  }
+  return bytes;
+}
+
+/* Used by control server to create the "listening" UDP socket */
+int udp_server(const char *host, const char *serv, socklen_t *addrlenp) {
+  int sockfd, n;
+  struct addrinfo hints, *res, *ressave;
+  const int on = 1;
+
+  bzero(&hints, sizeof(struct addrinfo));
+  hints.ai_flags = AI_PASSIVE;
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_DGRAM;
+
+  if ( (n=getaddrinfo(host, serv, &hints, &res)) != 0) {
+    printf("udp_server getaddrinfo: %s", gai_strerror(n));
+    exit(1);
+  }
+
+  /* Save linked listed head for freeaddinfo() */
+  ressave = res;
+
+  while (res != NULL) {
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+    if (sockfd < 0) {
+      continue;
+    }
+    /* This will allow server restart */
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
+    if (bind(sockfd, res->ai_addr, res->ai_addrlen) == 0) {
+      break;
+    }
+
+    close(sockfd);
+    res=res->ai_next;
+  }
+  if (res == NULL) {
+    perror("Could not create and bind UDP socket to given port");
+    exit(1);
+  }
+
+  if (addrlenp)
+    *addrlenp = res->ai_addrlen;
+
+  freeaddrinfo(ressave);
+  return sockfd;
+}
+
+/* Used to create a connected UDP socket */
+int udp_connected(const struct sockaddr *cliaddr, socklen_t clilen) {
+  int sockfd;
+
+  sockfd = socket(cliaddr->sa_family, SOCK_DGRAM, 0);
+
+  if (sockfd < 0) {
+    perror("Could not create UDP socket");
+    exit(1);
+  }
+
+  while (1) {
+    if (connect(sockfd, cliaddr, clilen) == -1) {
+      /* Signal interruption, try again */
+      if (errno==EINTR) {
+	continue;
+      }
+      perror("Cannot connect to server");
+      exit(1);
+    }
+    break;
+  }
+  return sockfd;
+}
 
 
 
