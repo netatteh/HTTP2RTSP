@@ -28,7 +28,7 @@ enum timeouttypes
 {
   FRAME,
   CHECKMEDIASTATE,
-  STARTSTREAMING
+  ENDOFSTREAM 
 };
 
 typedef struct client

@@ -185,7 +185,7 @@ Frame *create_sprop_frame(unsigned char *ps, size_t pslen, uint32_t ts)
 
 void *fill_queue(void *thread_params)
 {
-  struct timeval basetime;
+  struct timeval basetime, prev_timestamp;
   int frametype;
   int quitflag = 0, mutlocked = 0, timeset = 0;
   Frame *frame;
@@ -219,6 +219,14 @@ void *fill_queue(void *thread_params)
               tinfo->audioIdx, tinfo->videoRate, tinfo->audioRate)) == -1) {
         oma_debug_print("EOF from the media file!\n");
         quitflag = 1;
+
+        /* Notify the server about the EOF */
+        event = (TimeoutEvent *)malloc(sizeof(TimeoutEvent));
+        event->frame = NULL;
+        event->type = ENDOFSTREAM;
+        event->time = prev_timestamp;
+        event->time.usec += 10;
+        push_event(event, &queue);
       }
       else {
         frame->frametype = (frametype == tinfo->videoIdx)?VIDEO_FRAME:AUDIO_FRAME;
@@ -227,6 +235,8 @@ void *fill_queue(void *thread_params)
         event->frame = frame;
         event->type = FRAME;
         set_timeval(event, basetime);
+
+        prev_timestamp = event->time;
 
         push_event(event, &queue);
       }
@@ -334,6 +344,9 @@ int start_server(const char *url, const char *rtspport)
               send_dummy_rtp(sendbuf, streamclient.videofds[0], &rtpseqno_video);
               push_timeout(&queue, 1000, CHECKMEDIASTATE);
             }
+          break;
+
+          case ENDOFSTREAM:
           break;
 
           default:
