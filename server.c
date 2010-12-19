@@ -225,7 +225,7 @@ void *fill_queue(void *thread_params)
         event->frame = NULL;
         event->type = ENDOFSTREAM;
         event->time = prev_timestamp;
-        event->time.usec += 10;
+        event->time.tv_usec += 10;
         push_event(event, &queue);
       }
       else {
