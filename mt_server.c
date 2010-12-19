@@ -72,6 +72,9 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
   unsigned char sip_outbuf[BUFSIZE];
   fd_set sipmasterfds, sipwritefds;
 
+  /* Enable repeating media session */
+  int media_downloaded = 0;
+
   FD_ZERO(&sipmasterfds);
   FD_ZERO(&sipwritefds);
 
@@ -116,6 +119,22 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
         switch (event->type) {
 
+	case ENDOFSTREAM:
+	  printf("MEDIA FINISHED\n");
+
+	  printf("Sending BYE to SIP clients...\n");
+	  for (k=0; k<MAXCLIENTS; k++) {
+	    if (clientlist[k] != NULL && clientlist[k]->ackrecvd == 1) {
+	      /* Send bye to SIP clients*/
+	      bzero(sip_outbuf, BUFSIZE);
+	      create_bye(&sipmsg, clientlist[k]);
+	      write_sip(&sipmsg, sip_outbuf, sipport);
+	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &(clientlist[k]->cliaddr), sizeof(clientlist[k]->cliaddr));
+	      printf("%s\n", sip_outbuf);
+	    }
+	  }
+	  break;
+
 	case FRAME:
 
 	  /* Video frame */
@@ -131,8 +150,6 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		rtpseqno_audio += send_audio_frame(sendbuf, event->frame, clientlist[k]->sockfd, rtpseqno_audio);
 	      }
 	    }
-	    
-            /* rtpseqno_audio += send_audio_frame(sendbuf, event->frame, streamclient.audiofds[0], rtpseqno_audio); */
           }
 
           free(event->frame->data);
@@ -140,32 +157,16 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
           break;
 
 	case CHECKMEDIASTATE:
-	  oma_debug_print("Timeout handling checking media state...\n");
+	  oma_debug_print("Checking if media ready for streaming...\n");
 	  if (mediastate != STREAM) {
+	    printf("Sending dummy RTP\n");
 	    send_dummy_rtp(sendbuf, streamclient.videofds[0], &rtpseqno_video);
 	    push_timeout(&queue, 1000, CHECKMEDIASTATE);
 	  }
           break;
 
-	case ENDOFSTREAM:
-	  /* TODO: send TEARDOWN to VLC */
-
-	  /* Send bye to SIP clients*/
-	  bzero(sip_outbuf, BUFSIZE);
-	  create_bye(&sipmsg, clientlist[k]);
-	  write_sip(&sipmsg, sip_outbuf, sipport);
-
-	  printf("Sending BYE to SIP clients...\n");
-
-	  for (k=0; k<MAXCLIENTS; k++) {
-	    if (clientlist[k] != NULL && clientlist[k]->ackrecvd == 1) {
-	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &(clientlist[k]->cliaddr), sizeof(clientlist[k]->cliaddr));
-	    }
-	  }
-	  break;
-
 	default:
-	  oma_debug_print("ERRORENOUS EVENT TYPE!\n");
+	  oma_debug_print("ERRONEOUS EVENT TYPE!\n");
           break;
         }
 	/* If there are elements left in the queue, calculate next timeout */
@@ -200,7 +201,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
         /* New connection from a client */
         if (i == listenfd) {
-	  oma_debug_print("Recieved a new connection to listenfd\n");
+	  oma_debug_print("Recieved a new RTSP connection\n");
           if ((tempfd = accept(i, (struct sockaddr *)&remoteaddr, &addrlen)) == -1) {
             if (errno != EWOULDBLOCK && errno != ECONNABORTED &&
                 errno != EPROTO && errno != EINTR) {
@@ -209,7 +210,10 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
           }
 
           /* If we are already serving a client, close the new connection. Otherwise, continue. */
-          if (streamclient.state != NOCLIENT) close (tempfd);
+          if (streamclient.state != NOCLIENT) {
+	    printf("Another RTSP client tried to connect. Sorry, we can only serve one client at a time\n");
+	    close (tempfd);
+	  }
           else {
             streamclient.rtspfd = tempfd;
             streamclient.state = CLICONNECTED;
@@ -219,7 +223,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
         }
 
-	/* New SIP client */
+	/* New SIP message received */
 	else if (i == siplistenfd) {
 	  bzero(sip_inbuf, BUFLEN);
 	  bzero(&cliaddr, clilen);
@@ -298,7 +302,6 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    write_sip(&ok, sip_outbuf, sipport);
 	    Sendto_all(siplistenfd, sip_outbuf, BUFLEN, 0, &cliaddr, clilen);
 	    printf("SIP 200 OK sent\n");
-	    sleep(5);
 
 	    /* Find and remove client info */
 	    for (k=0; k<MAXCLIENTS; k++) {
@@ -311,6 +314,21 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		nclients--;
 		break;
 	      }
+	    }
+	  }
+	  else if (sipmsg.type == SIPOK) {
+	    printf("SIP 200 OK received, removing client info\n");
+
+	    for (k=0; k<MAXCLIENTS; k++) {
+	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg.callid)==0) ) {
+		/* Remove client info */
+		FD_CLR(clientlist[k]->sockfd, &sipmasterfds);
+		close(clientlist[k]->sockfd);
+		free(clientlist[k]);
+		clientlist[k] = NULL;
+		nclients--;
+		break;
+	      } 
 	    }
 	  }
 	  else {
@@ -340,9 +358,9 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    if ((recvd = recv_all(i, msgbuf, BUFSIZE, 0)) == 0) {
 	      FD_CLR(i, &masterfds);
 	      close(i);
-	      oma_debug_print("Socket closed\n");
+	      oma_debug_print("Media socket closed\n");
 	    }
-	    oma_debug_print("Received data from video source!\n");
+	    /* oma_debug_print("Received data from video source!\n"); */
 
 	    writestr(videofd, msgbuf, recvd);
 	    videoleft -= recvd;
@@ -352,6 +370,8 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      FD_CLR(mediafd, &masterfds);
 	      close(videofd);
 	      close(mediafd);
+	      oma_debug_print("Media socket closed\n");
+	      media_downloaded = 1;
 
 	      /* Create the context and the queue filler thread parameter struct */
 	      tinfo = (ThreadInfo *)malloc(sizeof(ThreadInfo));
@@ -375,7 +395,6 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      push_timeout(&queue, 1000, CHECKMEDIASTATE);
 	      unlock_mutex(&queuelock);
 
-
 	      mediastate = STREAM;
 	    }
 	    break;
@@ -392,18 +411,50 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	
 	/* Data from a client ( i == streamclient.rtspfd) */
 	else {
-
 	  oma_debug_print("Received data from rtspfd\n");
 
 	  if ((recvd = recv_all(i, msgbuf, BUFSIZE, 0)) == 0) {
 	    FD_CLR(i, &masterfds);
 	    close(i);
-	    oma_debug_print("Socket closed\n");
+	    oma_debug_print("RTSP client closed the connection\n");
 	    streamclient.state = NOCLIENT;
 	  }
 	  else {
 	    oma_debug_print("%s", msgbuf);
 	    parse_rtsp(&rtspmsg, msgbuf);
+	  }
+
+	  if (rtspmsg.type == TEARDOWN) {
+	    printf("RTSP TEARDOWN received\n");
+	    /* Reply with 200 OK */
+
+	    /* Kill thread and empty queue */
+	    lock_mutex(&queuelock);
+	    pthread_cancel(threadid);
+	    empty_queue(&queue);
+	    sleep(1);
+	    unlock_mutex(&queuelock);
+
+	    sent = rtsp_teardown(&rtspmsg, sendbuf);
+	    send_all(i, sendbuf, sent);
+	    printf("RTSP 200 OK sent\n");
+	    printf("%s\n", sendbuf);
+	    FD_CLR(i, &masterfds);
+	    close(i);
+	    close(streamclient.videofds[0]);
+	    close(streamclient.videofds[1]);
+	    close(streamclient.audiofds[0]);
+	    close(streamclient.audiofds[1]);
+
+	    printf("Closing AVFormatContext\n");
+	    close_context(tinfo->ctx);
+	    free(tinfo);
+	    rtpseqno_video = (rand() % 1000000) + 7;
+	    rtpseqno_audio = rtpseqno_video + 9;
+	    init_client(&streamclient);
+
+	    oma_debug_print("RTCP client sockets (RTP&RTCP) closed\n");
+	    streamclient.state = NOCLIENT;
 	  }
 
 	  switch (streamclient.state) {
@@ -413,18 +464,22 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      send_all(i, sendbuf, sent);
 	    }
 	    else if (rtspmsg.type == DESCRIBE) {
+	      /* Start fetching the file from the server (if it hasnt been downloaded before) */
+	      if (media_downloaded == 0) {
+		parse_url(url, urlhost, urlpath);
+		resolve_host(urlhost, "80", SOCK_STREAM, 0, &info);
+		mediafd = client_socket(info, 0);
+		FD_SET(mediafd, &masterfds);
+		maxfd = max(2, maxfd, mediafd);
 
-	      /* Start fetching the file from the server */
-	      parse_url(url, urlhost, urlpath);
-	      resolve_host(urlhost, "80", SOCK_STREAM, 0, &info);
-	      mediafd = client_socket(info, 0);
-	      FD_SET(mediafd, &masterfds);
-	      maxfd = max(2, maxfd, mediafd);
-
-	      /* Send the GET message */
-	      http_get(url, msgbuf);
-	      send_all(mediafd, msgbuf, strlen((char *)msgbuf));
-	      mediastate = GETSENT;
+		/* Send the GET message */
+		http_get(url, msgbuf);
+		send_all(mediafd, msgbuf, strlen((char *)msgbuf));
+		mediastate = GETSENT;
+	      }
+	      else {
+		mediastate = STREAM;
+	      }
 
 	      /* Send the SDP without sprop-parameter-sets, those are sent                                                                                          
 	       * later in-band */
@@ -457,7 +512,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		resolve_host(tempstr, rtspmsg.clirtpport, SOCK_DGRAM, 0, &info);
 		streamclient.videofds[0] = client_socket(info, streamclient.server_rtp_video_port);
 		resolve_host(tempstr, rtspmsg.clirtcpport, SOCK_DGRAM, 0, &info);
-		streamclient.audiofds[1] = client_socket(info, streamclient.server_rtcp_video_port);
+		streamclient.videofds[1] = client_socket(info, streamclient.server_rtcp_video_port);
 		
 		sent = rtsp_setup(&rtspmsg, &streamclient, sendbuf,
 				  streamclient.server_rtp_video_port, streamclient.server_rtcp_video_port);
@@ -473,16 +528,41 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
 	  case SETUPCOMPLETE:
 	    if (rtspmsg.type == PLAY) {
-
-	      /* Respond to the PLAY request, and start sending dummy RTP packets                                                                                   
-	       * to disable the client timeout */
+	      /* Reply to PLAY */
 	      sent = rtsp_play(&rtspmsg, sendbuf);
 	      send_all(i, sendbuf, sent);
-	      lock_mutex(&queuelock);
-	      push_timeout(&queue, 100, CHECKMEDIASTATE);
-	      unlock_mutex(&queuelock);
-	    }
 
+	      if (media_downloaded == 0) {
+		/* Start sending dummy RTP packets to disable the client timeout */
+		lock_mutex(&queuelock);
+		push_timeout(&queue, 100, CHECKMEDIASTATE);
+		unlock_mutex(&queuelock);
+	      }
+
+	      /* Media has already been once downloaded, initialize context and thread */
+	      else {
+		tinfo = (ThreadInfo *)malloc(sizeof(ThreadInfo));
+		initialize_context(&tinfo->ctx, "videotemp.mp4", &tinfo->videoIdx, &tinfo->audioIdx,
+				   &tinfo->videoRate, &tinfo->audioRate, &sps, &spslen, &pps, &ppslen);
+		/* Launch the queue filler thread */
+		CHECK((pthread_create(&threadid, NULL, fill_queue, tinfo)) == 0);
+		pthread_detach(threadid);
+
+		/* Send the sprop-parameters before any other frames */
+		send_video_frame(sendbuf, create_sprop_frame(sps, spslen, 0),
+				 streamclient.videofds[0], rtpseqno_video++);
+		send_video_frame(sendbuf, create_sprop_frame(pps, ppslen, 0),
+				 streamclient.videofds[0], rtpseqno_video++);
+	       
+		g_free(sps);
+		g_free(pps);
+
+		/* Dummy timeouts to start queue/timeout mechanism */
+		push_timeout(&queue, 100, CHECKMEDIASTATE);
+		push_timeout(&queue, 2000, CHECKMEDIASTATE);
+	      }
+
+	    }
 	    break;
 
 	  default:
@@ -499,7 +579,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
   if (queue.size > 0) {
     CHECK((gettimeofday(&timenow, NULL)) == 0);
     *timeout = calculate_delta(&timenow, &queue.first->time);
-    oma_debug_print("Delta sec: %ld, Delta usec: %ld\n", timeout->tv_sec, timeout->tv_usec);
+    /* oma_debug_print("Delta sec: %ld, Delta usec: %ld\n", timeout->tv_sec, timeout->tv_usec);*/
     
     if (timeout->tv_sec < 0) {
       timeout->tv_sec = 0;

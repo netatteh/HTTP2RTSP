@@ -22,9 +22,6 @@ int debug;
 /* Signals come here */
 sig_atomic_t signo;
 
-
-
-
 void sig_handler(int signum)
 {
   signo = signum; 
@@ -68,7 +65,7 @@ int main(int argc, char *argv[])
   /* TODO: t is not yet used */
   int f = 0, t = 0, l = 0, s = 0;
 
-  debug = 1;
+  debug = 0;
 
   memset(httpsource, 0, URLSIZE);
   memset(rtspport, 0, 10);
@@ -121,10 +118,12 @@ int main(int argc, char *argv[])
 
   /* If -s is given, starts Movie Theatre (assignment 2)*/
   if (s) {
+    printf("Starting HTTP2MT proxy server version 0.1 by Helenius, Korhonen & Saarnia\n\n");
     start_mt_server(httpsource, rtspport, sipport);
   }
   /* Otherwise, start HTTP2RTSP (assignment 1) */
   else {
+    printf("Starting HTTP2RTSP proxy server version 0.2 by Helenius, Korhonen & Saarnia\n\n");
     start_server(httpsource, rtspport);
   }
   close(logfd);

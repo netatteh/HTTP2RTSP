@@ -3,12 +3,18 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "fileio.h"
+
+extern int logfd;
+
 /* Parses an incoming SIP message from buf and fills the contents                                                                                                    
    to a SIPMsg strucure. Handles INVITE, ACK, BYE */
 int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
   char *temp = (char *)buffer;
   char *end = strstr((char *)buffer, "\r\n\r\n");
   int typeflag = 0;
+
+  write_log(logfd, "Received SIP message\n%s\n", buffer);
 
   memset(msg, 0, sizeof(SIPMsg));
 
@@ -23,6 +29,9 @@ int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
       }
       else if (strncmp(temp, "BYE", 3) == 0) {
 	msg->type = BYE;
+      }
+      else if (strncmp(temp, "SIP/2.0 200 OK", 14) == 0) {
+	msg->type = SIPOK;
       }
       /* Unsupported msg type */
       else return -1;
@@ -179,6 +188,8 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
   if ( (msg->fields & SIP_CONTENTLEN) && msg->contentlen > 0 ) {
     sprintf(temp, "%s\r\n", msg->contents);
   }
+
+  write_log(logfd, "Sent SIP message\n%s\n", temp);
 
   return 0;
 }

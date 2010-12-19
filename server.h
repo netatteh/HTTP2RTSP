@@ -1,8 +1,9 @@
 #ifndef HTTP2RTSP_SERVER_H
 #define HTTP2RTSP_SERVER_H
 
+#include <libavformat/avformat.h>
 
-#include "parse_video.h"
+struct frame;
 
 
 #define QUEUESIZE 200
@@ -52,7 +53,7 @@ typedef struct timeoutevent
   struct timeoutevent *next, *prev;
   struct timeval time;
   int type;
-  Frame *frame;
+  struct frame *frame;
 } TimeoutEvent;
 
 
@@ -68,6 +69,8 @@ typedef struct thread_info
   int videoIdx, audioIdx;
   double videoRate, audioRate;
 } ThreadInfo;
+
+void empty_queue(Queue *queue);
 
 void init_client(Client *client);
 
@@ -97,7 +100,7 @@ int timecmp(struct timeval first, struct timeval second);
 /* Calculates the difference between two time instants, (second - first) */
 struct timeval calculate_delta(struct timeval *first, struct timeval *second);
 
-Frame *create_sprop_frame(unsigned char *sps, size_t spslen, uint32_t ts);
+struct frame *create_sprop_frame(unsigned char *sps, size_t spslen, uint32_t ts);
 
 #endif
 

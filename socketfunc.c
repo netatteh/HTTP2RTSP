@@ -48,6 +48,7 @@ int client_socket(struct addrinfo *info, int bindport)
   int sockfd;
   struct addrinfo *step, *ownaddr;
   char portstr[10] = {0};
+  const int on = 1;
 
   for (step = info; step != NULL; step = step->ai_next)
   {
@@ -57,6 +58,8 @@ int client_socket(struct addrinfo *info, int bindport)
       perror("socket()");
       continue;
     }
+
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
     if (bindport > 0) {
       sprintf(portstr, "%d", bindport);
