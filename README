@@ -1,0 +1,3 @@
+Usage: ./http2rtsp -f <http address of source> -l <rtsp listening ports> [-s <sip listening port>]
+If parameter -s is given, the Movie theatre scenario (Assignment 2) is started.
+
