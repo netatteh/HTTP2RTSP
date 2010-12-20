@@ -224,7 +224,6 @@ void *fill_queue(void *thread_params)
   }
 
   while (!quitflag) {
-
     lock_mutex(&queuelock);
     pthread_cond_wait(&queuecond, &queuelock);
     mutlocked = 1;
@@ -343,7 +342,7 @@ int start_server(const char *url, const char *rtspport)
     readfds = masterfds;
 
     if ((nready = Select(maxfd + 1, &readfds, timeind)) == -1) {
-      write_log(logfd, "Select interrupted by a signal\n");
+      printf("Select interrupted by a signal\n");
     } 
 
     /* Timeout handling, used for packet pacing and other timeouts */
@@ -418,6 +417,7 @@ int start_server(const char *url, const char *rtspport)
         /* New connection from a client */
         if (i == listenfd) {
           oma_debug_print("Recieved a new RTSP connection\n");
+	  fflush(stdout);
           if ((tempfd = accept(i, (struct sockaddr *)&remoteaddr, &addrlen)) == -1) {
             if (errno != EWOULDBLOCK && errno != ECONNABORTED &&
                 errno != EPROTO && errno != EINTR) {
@@ -435,7 +435,7 @@ int start_server(const char *url, const char *rtspport)
             streamclient.state = CLICONNECTED;
             maxfd = max(2, streamclient.rtspfd, maxfd);
             FD_SET(streamclient.rtspfd, &masterfds);
-          }
+	    }
         }
 
         /* Data from the media source */
@@ -466,12 +466,13 @@ int start_server(const char *url, const char *rtspport)
               videoleft -= recvd;
 
               if (videoleft <= 0) {
-                oma_debug_print("Video download complete!\n");
+                
 		printf("Video download complete.\n");
                 FD_CLR(mediafd, &masterfds);
                 close(videofd);
                 close(mediafd);
 		media_downloaded = 1;
+		printf("Media socket closed\n");
 
                 /* Create the context and the queue filler thread parameter struct */
                 tinfo = (ThreadInfo *)malloc(sizeof(ThreadInfo));
@@ -499,8 +500,7 @@ int start_server(const char *url, const char *rtspport)
               }
               break;
 
-              /* TODO: Start streaming, currently just exits the program */
-            case STREAM:
+             case STREAM:
               /*
                  close(videofd);
                  close(mediafd);
@@ -518,6 +518,7 @@ int start_server(const char *url, const char *rtspport)
         else {
 
           oma_debug_print("Received data from rtspfd\n");
+	  fflush(stdout);
 
           if ((recvd = recv_all(i, msgbuf, BUFSIZE, 0)) == 0) {
             FD_CLR(i, &masterfds);
@@ -528,25 +529,20 @@ int start_server(const char *url, const char *rtspport)
           else {
             oma_debug_print("%s", msgbuf);
             parse_rtsp(&rtspmsg, msgbuf);
-
-	    printf("Received RTSP message\n");
-	    printf("%s\n", msgbuf); 
           }
 
 	  if (rtspmsg.type == TEARDOWN) {
 
-            /* Kill thread and empty queue */
-            lock_mutex(&queuelock);
+            /* Kill thread and empty queue */         
+ 	    lock_mutex(&queuelock);
             pthread_cancel(threadid);
             empty_queue(&queue);
             sleep(1);
-            unlock_mutex(&queuelock);
+            
 
 	    /* Reply with 200 OK */
             sent = rtsp_teardown(&rtspmsg, sendbuf);
             send_all(i, sendbuf, sent);
-            printf("RTSP 200 OK sent\n");
-            printf("%s\n", sendbuf);
             FD_CLR(i, &masterfds);
             close(i);
             close(streamclient.videofds[0]);
@@ -561,8 +557,11 @@ int start_server(const char *url, const char *rtspport)
             rtpseqno_audio = rtpseqno_video + 9;
             init_client(&streamclient);
 
-            oma_debug_print("Closing RTSP client sockets (RTP&RTCP)\n");
+	    printf("Closing RTSP client sockets (RTP&RTCP)\n");
             streamclient.state = NOCLIENT;
+
+	    unlock_mutex(&queuelock);
+	    pthread_cond_signal(&queuecond);
           }
 
           switch (streamclient.state) {
@@ -571,8 +570,6 @@ int start_server(const char *url, const char *rtspport)
               if (rtspmsg.type == OPTIONS) {
                 sent = rtsp_options(&rtspmsg, &streamclient, sendbuf);
                 send_all(i, sendbuf, sent);
-
-		printf("RTSP OPTIONS sent\n");
               }
               else if (rtspmsg.type == DESCRIBE) {
 		if (media_downloaded == 0) {
@@ -646,6 +643,7 @@ int start_server(const char *url, const char *rtspport)
                 send_all(i, sendbuf, sent);
 
 		if (media_downloaded == 0) {
+		 
 		  lock_mutex(&queuelock);
 		  push_timeout(&queue, 100, CHECKMEDIASTATE);
 		  unlock_mutex(&queuelock);
@@ -686,6 +684,7 @@ int start_server(const char *url, const char *rtspport)
     }
 
     /* Set the timeout value again, since select will mess it up */
+    
     lock_mutex(&queuelock);
     if (queue.size > 0) {
       CHECK((gettimeofday(&timenow, NULL)) == 0);
