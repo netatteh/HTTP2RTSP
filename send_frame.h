@@ -1,8 +1,6 @@
 #ifndef SEND_FRAME_H
 #define SEND_FRAME_H
 
-//#include "parse_video.h"   /* definition of struct frame */
-
 struct frame;
 
 #define FIRSTBYTE 0x80
