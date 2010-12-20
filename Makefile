@@ -4,7 +4,7 @@ LDFLAGS=-lavformat -lavcodec
 
 SUFFIXES=.c .o
 
-PROGS=http2rtsp tester parsetest timeouttest rtptest
+PROGS=http2rtsp
 
 all: $(PROGS)
 
