@@ -109,7 +109,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
     readfds = masterfds;
 
     if ((nready = Select(maxfd + 1, &readfds, timeind)) == -1) {
-      write_log(logfd, "Select interrupted by a signal\n");
+      printf("Select interrupted by a signal\n");
     } 
     /* Timeout handling, used for packet pacing and other timeouts */
     else if (nready == 0) {
@@ -130,8 +130,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      create_bye(&sipmsg, clientlist[k]);
 	      write_sip(&sipmsg, sip_outbuf, sipport);
 	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &(clientlist[k]->cliaddr), sizeof(clientlist[k]->cliaddr));
-	      printf("%s\n", sip_outbuf);
-	    }
+	      }
 	  }
 	  break;
 
@@ -234,8 +233,6 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 
 	  /* Received INVITE */
 	  if (sipmsg.type == INVITE) {
-	    printf("SIP INVITE received\n");
-
 	    if (nclients < MAXCLIENTS) {
 	      bzero(&ok, sizeof(&ok));
 	      bzero(sip_outbuf, sizeof(sip_outbuf));
@@ -243,8 +240,6 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      create_ok(&sipmsg, &ok);
 	      write_sip(&ok, sip_outbuf, sipport);
 	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &cliaddr, clilen);
-
-	      printf("SIP 200 OK sent\n");
 
 	      rtpaddr = cliaddr;
 
@@ -269,20 +264,17 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		  clientlist[k] = client;
 		  FD_SET(clientlist[k]->sockfd, &sipmasterfds);
 		  nclients++;
-		  write_log(logfd, "SIP client accepted\n");
+		  printf("SIP client accepted\n");
 		  break;
 		}
 	      }
 
 	    }
 	    else {
-	      write_log(logfd, "SIP client rejected: MAXCLIENTS reached\n");
-	      printf("SIP MAXCLIENTS reached! Cannot accept new SIP clients\n");
+	      printf("SIP client rejected: MAXCLIENTS reached\n");
 	    }
 	  }
 	  else if (sipmsg.type == ACK) {
-	    printf("SIP ACK received\n");
-
 	    /* Add client to writefds  */
 	    for (k=0; k<MAXCLIENTS; k++) {
 	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg.callid)==0) ) {
@@ -294,14 +286,11 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      }
 	    }
 	  }
-	  else if (sipmsg.type == BYE) {
-	    printf("SIP BYE received\n");
-	    
+	  else if (sipmsg.type == BYE) {    
 	    /* Send OK message */
 	    create_ok(&sipmsg, &ok);
 	    write_sip(&ok, sip_outbuf, sipport);
 	    Sendto_all(siplistenfd, sip_outbuf, BUFLEN, 0, &cliaddr, clilen);
-	    printf("SIP 200 OK sent\n");
 
 	    /* Find and remove client info */
 	    for (k=0; k<MAXCLIENTS; k++) {
@@ -311,14 +300,13 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		close(clientlist[k]->sockfd);
 		free(clientlist[k]);
 		clientlist[k] = NULL;
+		printf("Removed SIP client info\n");
 		nclients--;
 		break;
 	      }
 	    }
 	  }
 	  else if (sipmsg.type == SIPOK) {
-	    printf("SIP 200 OK received, removing client info\n");
-
 	    for (k=0; k<MAXCLIENTS; k++) {
 	      if ( (clientlist[k] != NULL) && (strcmp(clientlist[k]->callid, sipmsg.callid)==0) ) {
 		/* Remove client info */
@@ -326,6 +314,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		close(clientlist[k]->sockfd);
 		free(clientlist[k]);
 		clientlist[k] = NULL;
+		printf("Removed SIP client info\n");
 		nclients--;
 		break;
 	      } 
@@ -366,11 +355,13 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    videoleft -= recvd;
 
 	    if (videoleft <= 0) {
-	      oma_debug_print("Video download complete!\n");
+	      
+	      printf("Video download complete\n");
 	      FD_CLR(mediafd, &masterfds);
 	      close(videofd);
 	      close(mediafd);
-	      oma_debug_print("Media socket closed\n");
+	      
+	      printf("Media socket closed\n");
 	      media_downloaded = 1;
 
 	      /* Create the context and the queue filler thread parameter struct */
@@ -425,20 +416,15 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	  }
 
 	  if (rtspmsg.type == TEARDOWN) {
-	    printf("RTSP TEARDOWN received\n");
-	    /* Reply with 200 OK */
-
 	    /* Kill thread and empty queue */
 	    lock_mutex(&queuelock);
 	    pthread_cancel(threadid);
 	    empty_queue(&queue);
 	    sleep(1);
-	    unlock_mutex(&queuelock);
+	    
 
 	    sent = rtsp_teardown(&rtspmsg, sendbuf);
 	    send_all(i, sendbuf, sent);
-	    printf("RTSP 200 OK sent\n");
-	    printf("%s\n", sendbuf);
 	    FD_CLR(i, &masterfds);
 	    close(i);
 	    close(streamclient.videofds[0]);
@@ -453,8 +439,10 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    rtpseqno_audio = rtpseqno_video + 9;
 	    init_client(&streamclient);
 
-	    oma_debug_print("RTCP client sockets (RTP&RTCP) closed\n");
+	    printf("RTCP client sockets (RTP&RTCP) closed\n");
 	    streamclient.state = NOCLIENT;
+
+	    unlock_mutex(&queuelock);
 	  }
 
 	  switch (streamclient.state) {

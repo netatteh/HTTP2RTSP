@@ -120,7 +120,7 @@ int send_video_frame(unsigned char *buf, struct frame *myFrame, int sockfd, uint
 int send_audio_frame(unsigned char *buf, struct frame *myframe, int sockfd, uint16_t seqnum)
 {
   unsigned char firstbyte = FIRSTBYTE;
-  unsigned char secondbyte = SECONDBYTE_PCMA;
+  unsigned char secondbyte = MARKEDSECONDBYTE_PCMA;
 
   memset(buf, 0, BUFSIZE);
 

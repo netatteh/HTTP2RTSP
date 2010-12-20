@@ -118,7 +118,7 @@ int create_ok(const SIPMsg *msg, SIPMsg *ok) {
 	    "s=SIP server\r\n"
 	    "c=IN IP4 127.0.0.1\r\n"
 	    "t=0 0\r\n"
-	    "m=audio 0 RTP/AVP 8\r\n"
+	    "m=audio 47522 RTP/AVP 8\r\n"
 	    "a=rtpmap:8 PCMA/8000/1\r\n");
 
     ok->contentlen = strlen(ok->contents);
