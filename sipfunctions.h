@@ -62,6 +62,6 @@ void create_bye(SIPMsg *bye, SIPClient *client);
 int create_ok(const SIPMsg *msg, SIPMsg *ok);
 
 /* Writes out the contents of the given SIPMsg to buffer */
-int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport);
+int write_sip(const SIPMsg *msg, unsigned char *buf);
 
 #endif

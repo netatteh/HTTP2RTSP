@@ -135,7 +135,7 @@ int create_ok(const SIPMsg *msg, SIPMsg *ok) {
 
 /* Writes out the contents of the given SIPMsg to buffer */
 /* Handles only 200 OK and BYE */
-int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
+int write_sip(const SIPMsg *msg, unsigned char *buf) {
   char *temp = (char *)buf;
   memset(temp, 0, BUFLEN);
 
