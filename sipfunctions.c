@@ -14,7 +14,7 @@ int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
   char *end = strstr((char *)buffer, "\r\n\r\n");
   int typeflag = 0;
 
-  write_log(logfd, "Received SIP message\n%s\n", buffer);
+  printf("Received SIP message\n%s\n", buffer);
 
   memset(msg, 0, sizeof(SIPMsg));
 
@@ -189,7 +189,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
     sprintf(temp, "%s\r\n", msg->contents);
   }
 
-  write_log(logfd, "Sent SIP message\n%s\n", temp);
+  printf("Sent SIP message\n%s\n", buf);
 
   return 0;
 }

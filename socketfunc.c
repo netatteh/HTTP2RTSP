@@ -34,7 +34,7 @@ int resolve_host(const char *hostname, const char *port, int socktype,
 
   if ((err = getaddrinfo(hostname, port, &hints, info)) != 0)
   {
-    write_log(logfd, "getaddrinfo failed");
+    printf("getaddrinfo failed");
     return -1;
   }
   
@@ -84,7 +84,7 @@ int client_socket(struct addrinfo *info, int bindport)
 
   if (step == NULL)
   {
-    write_log(logfd, "Could not connect to host.\n");
+    printf("Could not connect to host.\n");
     return -1;
   }
 

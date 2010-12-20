@@ -264,7 +264,6 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		  clientlist[k] = client;
 		  FD_SET(clientlist[k]->sockfd, &sipmasterfds);
 		  nclients++;
-		  printf("SIP client accepted\n");
 		  break;
 		}
 	      }
@@ -282,6 +281,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 		strcpy(clientlist[k]->from, sipmsg.from);
 		strcpy(clientlist[k]->to, sipmsg.to);
 		clientlist[k]->cliaddr = cliaddr;
+		printf("SIP client accepted\n");
 		break;
 	      }
 	    }
@@ -337,6 +337,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	    recvd = recv_all(i, msgbuf, BUFSIZE, MSG_PEEK);
 	    temp = strstr((char *)msgbuf, "\r\n\r\n");
 	    recvd = recv_all(i, msgbuf, (int)(temp + 4 - (char *)msgbuf), 0);
+	    printf("Received HTTP response\n%s\n", msgbuf);
 	    temp = strstr((char *)msgbuf, "Content-Length:");
 	    sscanf(temp, "Content-Length: %d", &videosize);
 	    videoleft = videosize;
