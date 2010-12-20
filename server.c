@@ -244,8 +244,7 @@ void *fill_queue(void *thread_params)
 
       oma_debug_print("fill_queue: calling get_frame\n");
       /* Get the frame. If none are available, end the loop and the entire function. */
-      if ((frametype = get_frame(tinfo->ctx, frame, tinfo->videoIdx, 
-              tinfo->audioIdx, tinfo->videoRate, tinfo->audioRate)) == -1) {
+      if ((frametype = get_frame(tinfo->ctx, frame, tinfo->videoIdx, tinfo->audioIdx)) == -1) {
         oma_debug_print("EOF from the media file!\n");
         quitflag = 1;
 
@@ -448,6 +447,7 @@ int start_server(const char *url, const char *rtspport)
               recvd = recv_all(i, msgbuf, BUFSIZE, MSG_PEEK);
               temp = strstr((char *)msgbuf, "\r\n\r\n");
               recvd = recv_all(i, msgbuf, (int)(temp + 4 - (char *)msgbuf), 0);
+              printf("Received HTTP response\n%s\n", msgbuf);
               temp = strstr((char *)msgbuf, "Content-Length:");
               sscanf(temp, "Content-Length: %d", &videosize);
               videoleft = videosize;

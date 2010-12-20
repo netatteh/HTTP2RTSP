@@ -27,8 +27,8 @@ int initialize_context(AVFormatContext **ctx, char *filename, int *videoIdx, int
 /* Call this in a loop to get the frames
    Allocate memory for myFrame yourself, the function will then fill it for you
    Returns: videoIdx if it's a video frame, audioIdx if it's an audio frame, -1 when all frames are read */
-int get_frame(AVFormatContext *ctx, Frame *myFrame, int videoIdx, int audioIdx,
-	      double videoRate, double audioRate);
+int get_frame(AVFormatContext *ctx, Frame *myFrame, int videoIdx, int audioIdx);
+
 
 /* Close file and context */
 void close_context(AVFormatContext *ctx);

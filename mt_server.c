@@ -128,7 +128,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      /* Send bye to SIP clients*/
 	      bzero(sip_outbuf, BUFSIZE);
 	      create_bye(&sipmsg, clientlist[k]);
-	      write_sip(&sipmsg, sip_outbuf, sipport);
+	      write_sip(&sipmsg, sip_outbuf);
 	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &(clientlist[k]->cliaddr), sizeof(clientlist[k]->cliaddr));
 	      }
 	  }
@@ -238,7 +238,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	      bzero(sip_outbuf, sizeof(sip_outbuf));
 	      
 	      create_ok(&sipmsg, &ok);
-	      write_sip(&ok, sip_outbuf, sipport);
+	      write_sip(&ok, sip_outbuf);
 	      Sendto_all(siplistenfd, sip_outbuf, strlen((char*)sip_outbuf), 0, &cliaddr, clilen);
 
 	      rtpaddr = cliaddr;
@@ -289,7 +289,7 @@ int start_mt_server(const char *url, const char *rtspport, const char *sipport)
 	  else if (sipmsg.type == BYE) {    
 	    /* Send OK message */
 	    create_ok(&sipmsg, &ok);
-	    write_sip(&ok, sip_outbuf, sipport);
+	    write_sip(&ok, sip_outbuf);
 	    Sendto_all(siplistenfd, sip_outbuf, BUFLEN, 0, &cliaddr, clilen);
 
 	    /* Find and remove client info */
