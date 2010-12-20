@@ -8,6 +8,8 @@
 #define GENERALERROR -3
 #define BUFSIZE 64000
 
+extern int logfd;
+
 /* A wrapper for getaddrinfo(). In case of error exits the program. */
 int resolve_host(const char *hostname, const char *port, int socktype, 
     int flags, struct addrinfo **info);

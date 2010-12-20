@@ -22,9 +22,6 @@ int debug;
 /* Signals come here */
 sig_atomic_t signo;
 
-
-
-
 void sig_handler(int signum)
 {
   signo = signum; 
@@ -34,7 +31,7 @@ void sig_handler(int signum)
 void usage(const char *progname)
 {
   printf(
-      "Usage: %s -f <http address of source> -t <media type> -l <rtsp listening ports> -s <sip listening port>\n",
+      "Usage: %s -f <http address of source> -l <rtsp listening ports> [-s <sip listening port>]\n",
       progname);
   printf("If parameter -s is given, the Movie theatre scenario (Assignment 2) is started.\n");
   exit(EXIT_SUCCESS);
@@ -66,22 +63,19 @@ int main(int argc, char *argv[])
 
 
   /* TODO: t is not yet used */
-  int f = 0, t = 0, l = 0, s = 0;
+  int f = 0, l = 0, s = 0;
 
-  debug = 1;
+  debug = 0;
 
   memset(httpsource, 0, URLSIZE);
   memset(rtspport, 0, 10);
 
   /* Process the command line arguments */
-  while ((c = getopt(argc, argv, "f:t:l:s:")) != -1) {
+  while ((c = getopt(argc, argv, "f:l:s:")) != -1) {
     switch (c) {
       case 'f':
         strncpy(httpsource, optarg, URLSIZE - 1);
         f = 1;
-        break;
-      case 't':
-        t = 1;
         break;
       case 'l':
         strncpy(rtspport, optarg, 9);
@@ -97,7 +91,7 @@ int main(int argc, char *argv[])
   }
 
   /* Check that all required parameters have been given */
-  if (!f || !t || !l) 
+  if (!f || !l) 
     usage(argv[0]);
 
   /* Do some necessary signal handling. PIPE for double sends,
@@ -114,17 +108,19 @@ int main(int argc, char *argv[])
   }
 
   /* Just a demonstration of how to use the logging functionality.
-   * Timestamps are added to the log automatically. */
-  write_log(logfd, "Magee logi %d %d %s\n", 3, 4, "Heppa");
+   * Timestamps are added to the log automatically.
+   *write_log(logfd, "Magee logi %d %d %s\n", 3, 4, "Heppa"); */
 
 
 
   /* If -s is given, starts Movie Theatre (assignment 2)*/
   if (s) {
+    printf("Starting HTTP2MT proxy server version 0.1 by Helenius, Korhonen & Saarnia\n\n");
     start_mt_server(httpsource, rtspport, sipport);
   }
   /* Otherwise, start HTTP2RTSP (assignment 1) */
   else {
+    printf("Starting HTTP2RTSP proxy server version 0.2 by Helenius, Korhonen & Saarnia\n\n");
     start_server(httpsource, rtspport);
   }
   close(logfd);

@@ -3,9 +3,12 @@
 #include <time.h>
 #include <stdlib.h>
 
+#include "fileio.h"
 #include "httpmsg.h"
 #include "socketfunc.h"
+#include "server.h"
 
+extern int logfd;
 
 /* TODO: Get message could include row "Range: bytes=x-y" to
  * request chuncks */
@@ -21,6 +24,8 @@ int http_get(const char *url, unsigned char *buffer)
  snprintf((char *)buffer, BUFSIZE, 
      "GET %s HTTP/1.1\r\nUser-Agent: http2rtsp\r\nHost: %s\r\nAccept: */*\r\n\r\n",
      path, host);
+
+ printf("Sent HTTP\n%s\n", buffer);
 
  return strlen((char *)buffer);
 
@@ -64,6 +69,8 @@ int parse_rtsp(RTSPMsg *msg, const unsigned char *buffer)
   int typeflag = 0;
 
   memset(msg, 0, sizeof(RTSPMsg));
+
+  printf("Received RTSP message\n%s\n", buffer);
 
   while (temp && temp < end) {
 
@@ -133,7 +140,7 @@ int write_rtsp(const RTSPMsg *msg, unsigned char *buffer)
   char *temp = (char *)buffer;
 
   memset(temp, 0, BUFSIZE);
-  
+
   sprintf(temp, "RTSP/1.0 200 OK\r\n");
   temp += strlen(temp);
 
@@ -180,6 +187,7 @@ int write_rtsp(const RTSPMsg *msg, unsigned char *buffer)
     temp += strlen(temp);
   }
 
+  printf("Sent RTSP message\n%s\n", buffer);
 
   return temp - (char *)buffer;
 
@@ -246,7 +254,6 @@ int rtsp_setup(const RTSPMsg *msg, Client *client, unsigned char *buf, int rtp, 
   return write_rtsp(&newmsg, buf);
 }
 
-
 int rtsp_play(const RTSPMsg *msg, unsigned char *buf)
 {
   char timebuf[50];
@@ -263,3 +270,17 @@ int rtsp_play(const RTSPMsg *msg, unsigned char *buf)
   return write_rtsp(&newmsg, buf); 
 }
 
+int rtsp_teardown(const RTSPMsg *msg, unsigned char *buf)
+{
+  RTSPMsg newmsg = *msg;
+
+  newmsg.type = OK;
+  newmsg.cseq = msg->cseq;
+  newmsg.session = msg->session;
+
+  newmsg.fields = 0;
+  newmsg.fields |= F_SESSION;
+  newmsg.fields |= F_CSEQ;
+
+  return write_rtsp(&newmsg, buf);
+}

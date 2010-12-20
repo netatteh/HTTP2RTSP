@@ -3,12 +3,18 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "fileio.h"
+
+extern int logfd;
+
 /* Parses an incoming SIP message from buf and fills the contents                                                                                                    
-   to a SIPMsg strucure  */
+   to a SIPMsg strucure. Handles INVITE, ACK, BYE */
 int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
   char *temp = (char *)buffer;
   char *end = strstr((char *)buffer, "\r\n\r\n");
   int typeflag = 0;
+
+  write_log(logfd, "Received SIP message\n%s\n", buffer);
 
   memset(msg, 0, sizeof(SIPMsg));
 
@@ -23,6 +29,9 @@ int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
       }
       else if (strncmp(temp, "BYE", 3) == 0) {
 	msg->type = BYE;
+      }
+      else if (strncmp(temp, "SIP/2.0 200 OK", 14) == 0) {
+	msg->type = SIPOK;
       }
       /* Unsupported msg type */
       else return -1;
@@ -76,6 +85,20 @@ int parsesipmsg(SIPMsg *msg, const unsigned char *buffer) {
   return 0;
 }
 
+void create_bye(SIPMsg *bye, SIPClient *client) {
+  bzero(bye, sizeof(bye));
+
+  bye->type = BYE;
+  strcpy(bye->from, client->to);
+  strcpy(bye->to, client->from);
+  strcpy(bye->callid, client->callid);
+  strcpy(bye->cseq, "20 BYE");
+  bye->contentlen = 0;
+
+  sprintf(bye->via, "SIP/2.0/UDP %s;rport;branch=z9hG4bK12345", client->from);
+
+}
+
 /* Creates an appropriate OK for given INVITE */
 int create_ok(const SIPMsg *msg, SIPMsg *ok) {
   memset(ok, 0, sizeof(SIPMsg));
@@ -95,7 +118,7 @@ int create_ok(const SIPMsg *msg, SIPMsg *ok) {
 	    "s=SIP server\r\n"
 	    "c=IN IP4 127.0.0.1\r\n"
 	    "t=0 0\r\n"
-	    "m=audio 0 RTP/AVP 8\r\n"
+	    "m=audio 47522 RTP/AVP 8\r\n"
 	    "a=rtpmap:8 PCMA/8000/1\r\n");
 
     ok->contentlen = strlen(ok->contents);
@@ -120,7 +143,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
     sprintf(temp, "SIP/2.0 200 OK\r\n");
   }
   else if (msg->type  == BYE) {
-    sprintf(temp, "BYE sip:kaisa@localhost SIP/2.0");
+    sprintf(temp, "BYE sip:kaisa@localhost SIP/2.0\r\n");
   }
   else {
     printf("write_sip: unsupported msg type\n");
@@ -143,7 +166,7 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
   sprintf(temp, "CSeq: %s\r\n", msg->cseq);
   temp += strlen(temp);
 
-  sprintf(temp, "Contact: <sip:localhost:%s>\r\n", sipport);
+  sprintf(temp, "Contact: %s\r\n", msg->to);
   temp += strlen(temp);
 
   sprintf(temp, "Max-Forwards: 70\r\n");
@@ -165,6 +188,8 @@ int write_sip(const SIPMsg *msg, unsigned char *buf, const char *sipport) {
   if ( (msg->fields & SIP_CONTENTLEN) && msg->contentlen > 0 ) {
     sprintf(temp, "%s\r\n", msg->contents);
   }
+
+  write_log(logfd, "Sent SIP message\n%s\n", temp);
 
   return 0;
 }

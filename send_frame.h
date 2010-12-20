@@ -1,12 +1,12 @@
 #ifndef SEND_FRAME_H
 #define SEND_FRAME_H
 
-#include "parse_video.h"   /* definition of struct frame */
+struct frame;
 
 #define FIRSTBYTE 0x80
 #define MARKEDSECONDBYTE_H264 0xe0
 #define UNMARKEDSECONDBYTE_H264 0x60
-#define SECONDBYTE_PCMA 0x08;
+#define MARKEDSECONDBYTE_PCMA 0x88;
 
 /* Packs frame into one or more RTP packets and sends to sockd. Assumes h.264 encoding.
  * Returns the number of packets that were sent */
